@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EcoStep QCU — Complete Hardware Circuit &amp; Wiring Guide</title>
+  <style>
+    :root {
+      --bg: #0b130e;
+      --card: #132117;
+      --soft: #1a2c1f;
+      --border: #28472e;
+      --green: #559632;
+      --amber: #f59e0b;
+      --text: #ecf5ed;
+      --muted: #9db3a0;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; padding: 20px; line-height: 1.5; }
+    .header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; border-bottom: 1px solid var(--border); padding-bottom: 14px; margin-bottom: 18px; }
+    .header h1 { font-size: 22px; color: #86efac; }
+    .header p { font-size: 13px; color: var(--muted); }
+    .btn { background: var(--soft); color: var(--text); border: 1px solid var(--border); padding: 8px 14px; border-radius: 8px; text-decoration: none; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .btn.primary { background: var(--green); color: #fff; border-color: var(--green); }
+    .viewer { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 14px; margin-bottom: 20px; }
+    .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px; }
+    .svg-box { width: 100%; height: 740px; overflow: auto; border-radius: 10px; border: 1px solid var(--border); background: #070d09; }
+    .svg-box object { width: 100%; height: 100%; display: block; transform-origin: top left; transition: transform 0.2s; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+    .card h2 { font-size: 15px; color: #f9b218; margin-bottom: 10px; }
+    li { margin-left: 18px; margin-bottom: 6px; font-size: 13px; color: var(--muted); }
+    strong { color: var(--text); }
+    code { background: #0b130e; border: 1px solid var(--border); padding: 1px 6px; border-radius: 4px; color: #86efac; font-size: 12px; }
+    @media print { body { background: #fff; color: #000; } .btn, .toolbar button { display: none; } .card { border: 1px solid #ccc; background: #fff; color: #000; } }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <h1>EcoStep QCU — Complete Circuit Blueprint (Tile ➔ Breadboard ➔ "I ❤️ QCU!" Sign ➔ ESP32 ➔ PC)</h1>
+      <p>Aligned with IPT2 Documentation (5.1V Zener, Path A/B Storage, 1.5 kΩ / 10 kΩ Sign Branches, 10-bit ADC) &amp; AR101 Mechanical Stackup</p>
+    </div>
+    <div style="display:flex; gap:8px;">
+      <button class="btn primary" onclick="window.print()">Print / Save PDF</button>
+      <a class="btn" href="ecostep_complete_circuit.svg" target="_blank">Open Raw SVG</a>
+    </div>
+  </div>
+
+  <div class="viewer">
+    <div class="toolbar">
+      <strong>Interactive Hardware &amp; Breadboard Map</strong>
+      <div style="display:flex; gap:6px;">
+        <button class="btn" onclick="zoom(1)">Reset (100%)</button>
+        <button class="btn" onclick="zoom(1.4)">Zoom 140%</button>
+        <button class="btn" onclick="zoom(1.9)">Zoom 190%</button>
+      </div>
+    </div>
+    <div class="svg-box">
+      <object id="svgObj" data="ecostep_complete_circuit.svg" type="image/svg+xml"></object>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>1. Floor Tile &amp; Protection Circuit</h2>
+      <ul>
+        <li><strong>16x PZT-5A Discs (Parallel):</strong> Twist all center ceramic leads to <code>AC1</code> (Row 10) and all brass rim leads to <code>AC2</code> (Row 15).</li>
+        <li><strong>4x M8 Stop Bolts:</strong> Calibrate to <code>2.5 mm</code> gap so loads over 35 kg (up to 300+ kg) bypass the piezo discs.</li>
+        <li><strong>Schottky Bridge (4x 1N5819):</strong> Converts AC spikes into DC on the <code>VH (+)</code> rail and Common <code>GND (-)</code> rail.</li>
+        <li><strong>Safety:</strong> Place <strong>5.1V Zener (1N4733A)</strong> (stripe to <code>VH</code>) + <strong>470 µF/25V</strong> tank cap + <strong>D5 (1N5819)</strong> check diode + <strong>500 mA PTC</strong> polyfuse before the <strong>6,600 µF / 0.47F</strong> reservoir.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>2. "I ❤️ QCU!" 18-LED Sign Wiring</h2>
+      <ul>
+        <li><strong>18 Recycled Micro-LEDs:</strong> 3 LEDs for <code>"I"</code>, 6 Red LEDs for <code>"❤️"</code>, 9 Green/White LEDs for <code>"QCU"</code>.</li>
+        <li><strong>SW1 (Charge / Fire):</strong> Keep OFF while walking to accumulate energy; switch ON to illuminate sign.</li>
+        <li><strong>SW2 (Full / Dim):</strong> Selects <code>1.5 kΩ</code> resistor branch (Full ~25 mA / 125 mW) or <code>10 kΩ</code> branch (Dim ~3.5 mA / 17.5 mW).</li>
+        <li><strong>Ground Return:</strong> All LED cathodes (-) tie back to the breadboard Common <code>GND</code> rail.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>3. ESP32-WROOM-32 Safe Sensing &amp; PC Link</h2>
+      <ul>
+        <li><strong>Common Ground:</strong> Wire breadboard <code>GND</code> directly to ESP32 <code>GND</code>.</li>
+        <li><strong>D35 (V_gen):</strong> <code>3.3 MΩ</code> (top) + <code>1.0 MΩ</code> (bottom) + <code>100 nF</code> cap to GND.</li>
+        <li><strong>D32 (V_cap):</strong> <code>1.5 MΩ</code> (top) + <code>1.0 MΩ</code> (bottom) + <code>100 nF</code> cap to GND.</li>
+        <li><strong>D34 (Trigger):</strong> Isolated Disc #17 through <code>100 kΩ / 1.0 MΩ</code> divider (or microswitch + <code>10 kΩ</code> pull-up to <code>3V3</code>).</li>
+        <li><strong>USB-C Cable:</strong> Powers ESP32 from laptop (0% drain on tile) and streams <code>DATA,step,adc_raw,volts</code> to <code>ecostep_app</code>.</li>
+      </ul>
+    </div>
+  </div>
+
+  <script>
+    function zoom(scale) {
+      document.getElementById('svgObj').style.transform = `scale(${scale})`;
+    }
+  </script>
+</body>
+</html>

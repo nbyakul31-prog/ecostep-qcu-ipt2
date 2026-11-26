@@ -1,0 +1,536 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1720 1180" width="100%" height="100%" style="background:#0b130e; font-family:'Segoe UI', -apple-system, system-ui, sans-serif;">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0d1811"/>
+      <stop offset="100%" stop-color="#070d09"/>
+    </linearGradient>
+    <linearGradient id="boardGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#f8faf5"/>
+      <stop offset="100%" stop-color="#e5ede0"/>
+    </linearGradient>
+    <linearGradient id="brassGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#b45309"/>
+    </linearGradient>
+    <linearGradient id="espShield" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#cbd5e1"/>
+      <stop offset="100%" stop-color="#64748b"/>
+    </linearGradient>
+    <filter id="cardShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#000000" flood-opacity="0.55"/>
+    </filter>
+    <filter id="glowAmber" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="0" stdDeviation="4" flood-color="#f59e0b" flood-opacity="0.85"/>
+    </filter>
+    <filter id="glowRed" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="0" stdDeviation="4" flood-color="#ef4444" flood-opacity="0.85"/>
+    </filter>
+    <filter id="glowGreen" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="0" stdDeviation="4" flood-color="#4ade80" flood-opacity="0.85"/>
+    </filter>
+    <marker id="arrRed" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 9 5 L 0 9 z" fill="#ef4444"/>
+    </marker>
+    <marker id="arrAmber" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 9 5 L 0 9 z" fill="#f59e0b"/>
+    </marker>
+    <marker id="arrGreen" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 9 5 L 0 9 z" fill="#4ade80"/>
+    </marker>
+    <marker id="arrCyan" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 9 5 L 0 9 z" fill="#38bdf8"/>
+    </marker>
+    <marker id="arrPurple" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 9 5 L 0 9 z" fill="#c084fc"/>
+    </marker>
+  </defs>
+
+  <!-- Background & Subtle Eco Grid -->
+  <rect width="1720" height="1180" fill="url(#bgGrad)"/>
+  <g opacity="0.06">
+    <pattern id="ecoGrid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#559632" stroke-width="1"/>
+    </pattern>
+    <rect width="1720" height="1180" fill="url(#ecoGrid)"/>
+  </g>
+
+  <!-- ======================================================================= -->
+  <!-- TOP HEADER & WIRE LEGEND                                                -->
+  <!-- ======================================================================= -->
+  <g transform="translate(30, 24)">
+    <rect width="1660" height="84" rx="14" fill="#132117" stroke="#28472e" stroke-width="1.5" filter="url(#cardShadow)"/>
+    <text x="24" y="34" fill="#86efac" font-size="20" font-weight="800">ECOSTEP QCU — COMPLETE HARDWARE CIRCUIT &amp; WIRING BLUEPRINT (IPT2 + AR101)</text>
+    <text x="24" y="58" fill="#9db3a0" font-size="13">1. Recycled Kinetic Tile (16x PZT + Trigger Disc) ➔ 2. Breadboard (Rectifier, 5.1V Zener, Storage, Dividers) ➔ 3. "I ❤️ QCU!" Sign ➔ 4. ESP32-WROOM-32 ➔ 5. CustomTkinter + PostgreSQL</text>
+
+    <g transform="translate(1075, 58)">
+      <rect x="0" y="-10" width="18" height="5" rx="2" fill="#c084fc"/>
+      <text x="24" y="-4" fill="#e9d5ff" font-size="11" font-weight="700">Piezo AC</text>
+      <rect x="95" y="-10" width="18" height="5" rx="2" fill="#ef4444"/>
+      <text x="119" y="-4" fill="#fecaca" font-size="11" font-weight="700">DC (+)</text>
+      <rect x="180" y="-10" width="18" height="5" rx="2" fill="#f59e0b"/>
+      <text x="204" y="-4" fill="#fde68a" font-size="11" font-weight="700">ADC ≤3.3V</text>
+      <rect x="285" y="-10" width="18" height="5" rx="2" fill="#38bdf8"/>
+      <text x="309" y="-4" fill="#bae6fd" font-size="11" font-weight="700">Step / PWM</text>
+      <rect x="395" y="-10" width="18" height="5" rx="2" fill="#64748b"/>
+      <text x="419" y="-4" fill="#cbd5e1" font-size="11" font-weight="700">Common GND</text>
+    </g>
+  </g>
+
+  <!-- ======================================================================= -->
+  <!-- STAGE 1: KINETIC FLOOR TILE (300 x 300 mm)                              -->
+  <!-- ======================================================================= -->
+  <g transform="translate(30, 130)">
+    <rect width="340" height="1010" rx="14" fill="#132117" stroke="#28472e" stroke-width="1.5" filter="url(#cardShadow)"/>
+    <rect width="340" height="44" rx="14" fill="#1b3420"/>
+    <text x="18" y="28" fill="#f9b218" font-size="14" font-weight="800">1. RECYCLED KINETIC FLOOR TILE</text>
+
+    <!-- Mechanical Stackup Box -->
+    <g transform="translate(20, 62)">
+      <rect width="300" height="190" rx="10" fill="#1a2c1f" stroke="#2f4d36"/>
+      <text x="14" y="22" fill="#86efac" font-size="12" font-weight="800">300×300 mm Tile Mechanical Stackup</text>
+      <!-- Top Tread -->
+      <rect x="16" y="34" width="268" height="22" rx="4" fill="#3f7d2b" stroke="#86efac"/>
+      <text x="150" y="49" fill="#ffffff" font-size="10" font-weight="800" text-anchor="middle">TOP TREAD: Recycled Eco-Mat + 18mm Plywood</text>
+      <!-- Springs & M8 Stop Bolts -->
+      <rect x="24" y="60" width="14" height="42" fill="#94a3b8"/>
+      <text x="44" y="76" fill="#cbd5e1" font-size="9">M8 Steel Stop Bolt</text>
+      <text x="44" y="90" fill="#fbbf24" font-size="9">(2.5mm gap = 300+ kg safe)</text>
+      <rect x="262" y="60" width="14" height="42" fill="#94a3b8"/>
+      <rect x="122" y="62" width="56" height="36" rx="4" fill="#28472b" stroke="#559632" stroke-dasharray="3 2"/>
+      <text x="150" y="83" fill="#bbf7d0" font-size="9" font-weight="700" text-anchor="middle">4x Springs</text>
+      <!-- Base -->
+      <rect x="16" y="106" width="268" height="20" rx="4" fill="#334155" stroke="#64748b"/>
+      <text x="150" y="120" fill="#e2e8f0" font-size="10" font-weight="700" text-anchor="middle">BASE CHASSIS + EVA FOAM BED</text>
+      <text x="16" y="146" fill="#9db3a0" font-size="10">• 16x Neoprene plunger studs press center of</text>
+      <text x="16" y="162" fill="#9db3a0" font-size="10">  PZT discs by max 2.0mm before hitting M8 bolts.</text>
+      <text x="16" y="178" fill="#fbbf24" font-size="10" font-weight="700">• Ceramic discs can NEVER be crushed!</text>
+    </g>
+
+    <!-- 4x4 PZT-5A Harvester Matrix -->
+    <g transform="translate(20, 270)">
+      <rect width="300" height="365" rx="10" fill="#1a2c1f" stroke="#2f4d36"/>
+      <text x="14" y="24" fill="#f9b218" font-size="12" font-weight="800">16x PZT-5A 35mm Matrix (Parallel)</text>
+      <text x="14" y="40" fill="#9db3a0" font-size="10">4x4 parallel grid boosts current ~16x safely</text>
+
+      <!-- 4x4 Piezo Circles -->
+      <g transform="translate(36, 56)">
+        <!-- Row 1 -->
+        <circle cx="25" cy="25" r="20" fill="url(#brassGrad)"/><circle cx="25" cy="25" r="12" fill="#f8fafc"/>
+        <circle cx="85" cy="25" r="20" fill="url(#brassGrad)"/><circle cx="85" cy="25" r="12" fill="#f8fafc"/>
+        <circle cx="145" cy="25" r="20" fill="url(#brassGrad)"/><circle cx="145" cy="25" r="12" fill="#f8fafc"/>
+        <circle cx="205" cy="25" r="20" fill="url(#brassGrad)"/><circle cx="205" cy="25" r="12" fill="#f8fafc"/>
+        <!-- Row 2 -->
+        <circle cx="25" cy="78" r="20" fill="url(#brassGrad)"/><circle cx="25" cy="78" r="12" fill="#f8fafc"/>
+        <circle cx="85" cy="78" r="20" fill="url(#brassGrad)"/><circle cx="85" cy="78" r="12" fill="#f8fafc"/>
+        <circle cx="145" cy="78" r="20" fill="url(#brassGrad)"/><circle cx="145" cy="78" r="12" fill="#f8fafc"/>
+        <circle cx="205" cy="78" r="20" fill="url(#brassGrad)"/><circle cx="205" cy="78" r="12" fill="#f8fafc"/>
+        <!-- Row 3 -->
+        <circle cx="25" cy="131" r="20" fill="url(#brassGrad)"/><circle cx="25" cy="131" r="12" fill="#f8fafc"/>
+        <circle cx="85" cy="131" r="20" fill="url(#brassGrad)"/><circle cx="85" cy="131" r="12" fill="#f8fafc"/>
+        <circle cx="145" cy="131" r="20" fill="url(#brassGrad)"/><circle cx="145" cy="131" r="12" fill="#f8fafc"/>
+        <circle cx="205" cy="131" r="20" fill="url(#brassGrad)"/><circle cx="205" cy="131" r="12" fill="#f8fafc"/>
+        <!-- Row 4 -->
+        <circle cx="25" cy="184" r="20" fill="url(#brassGrad)"/><circle cx="25" cy="184" r="12" fill="#f8fafc"/>
+        <circle cx="85" cy="184" r="20" fill="url(#brassGrad)"/><circle cx="85" cy="184" r="12" fill="#f8fafc"/>
+        <circle cx="145" cy="184" r="20" fill="url(#brassGrad)"/><circle cx="145" cy="184" r="12" fill="#f8fafc"/>
+        <circle cx="205" cy="184" r="20" fill="url(#brassGrad)"/><circle cx="205" cy="184" r="12" fill="#f8fafc"/>
+      </g>
+
+      <!-- Tie Outputs -->
+      <rect x="16" y="274" width="268" height="36" rx="6" fill="#231932" stroke="#9333ea"/>
+      <text x="28" y="296" fill="#e9d5ff" font-size="11" font-weight="800">ALL CERAMIC CENTER WIRES ➔ AC1 (Row 10)</text>
+
+      <rect x="16" y="318" width="268" height="36" rx="6" fill="#231932" stroke="#9333ea"/>
+      <text x="28" y="340" fill="#e9d5ff" font-size="11" font-weight="800">ALL BRASS RIM WIRES ➔ AC2 (Row 15)</text>
+    </g>
+
+    <!-- Isolated Step-Sensor Disc #17 -->
+    <g transform="translate(20, 652)">
+      <rect width="300" height="215" rx="10" fill="#1a2c1f" stroke="#0ea5e9"/>
+      <text x="14" y="24" fill="#38bdf8" font-size="12" font-weight="800">Isolated Trigger Sensor (Disc #17)</text>
+      <text x="14" y="40" fill="#9db3a0" font-size="10">Separate from power matrix (or microswitch)</text>
+
+      <circle cx="62" cy="94" r="32" fill="url(#brassGrad)"/>
+      <circle cx="62" cy="94" r="20" fill="#f8fafc"/>
+      <text x="62" y="98" fill="#0369a1" font-size="9" font-weight="800" text-anchor="middle">TRIG</text>
+
+      <text x="110" y="76" fill="#bae6fd" font-size="11" font-weight="700">Center ➔ 100kΩ/1MΩ Divider</text>
+      <text x="110" y="94" fill="#38bdf8" font-size="11" font-weight="800">➔ ESP32 D34 (INT0)</text>
+      <text x="110" y="116" fill="#cbd5e1" font-size="11" font-weight="700">Brass Rim ➔ Common GND</text>
+
+      <rect x="14" y="144" width="272" height="58" rx="6" fill="#112017" stroke="#28472e"/>
+      <text x="24" y="164" fill="#86efac" font-size="10" font-weight="700">Optional Microswitch Alternative:</text>
+      <text x="24" y="180" fill="#9db3a0" font-size="10">Switch between D34 &amp; GND + 10kΩ pull-up</text>
+      <text x="24" y="194" fill="#9db3a0" font-size="10">to ESP32 3V3 (D34 has no internal pull-up).</text>
+    </g>
+
+    <!-- Safety Note -->
+    <g transform="translate(20, 882)">
+      <rect width="300" height="108" rx="10" fill="#3b1214" stroke="#dc2626"/>
+      <text x="14" y="24" fill="#fca5a5" font-size="11" font-weight="800">CRITICAL 3.3V ESP32 SAFETY RULE</text>
+      <text x="14" y="44" fill="#fee2e2" font-size="10">Never touch raw AC1/AC2 or raw VH directly</text>
+      <text x="14" y="60" fill="#fee2e2" font-size="10">to ESP32 pins! Always pass through the</text>
+      <text x="14" y="76" fill="#fee2e2" font-size="10">5.1V Zener clamp + resistor voltage dividers</text>
+      <text x="14" y="92" fill="#fde047" font-size="10" font-weight="700">and verify ≤ 3.3V on multimeter first.</text>
+    </g>
+  </g>
+
+  <!-- ======================================================================= -->
+  <!-- STAGE 2 & 3: BREADBOARD + PROTECTION + "I ❤️ QCU!" 18-LED SIGN          -->
+  <!-- ======================================================================= -->
+  <g transform="translate(400, 130)">
+    <rect width="890" height="1010" rx="16" fill="url(#boardGrad)" stroke="#84a973" stroke-width="3" filter="url(#cardShadow)"/>
+
+    <!-- Breadboard Header -->
+    <rect x="18" y="14" width="854" height="36" rx="8" fill="#172e1c"/>
+    <text x="34" y="37" fill="#86efac" font-size="14" font-weight="800">2. BREADBOARD: CONDITIONING, STORAGE BANK, VOLTAGE DIVIDERS &amp; 3. "I ❤️ QCU!" SIGN</text>
+
+    <!-- Top Bus Rails -->
+    <rect x="24" y="60" width="842" height="22" rx="4" fill="#fee2e2" stroke="#fca5a5"/>
+    <line x1="40" y1="71" x2="846" y2="71" stroke="#ef4444" stroke-width="3"/>
+    <text x="48" y="75" fill="#991b1b" font-size="11" font-weight="800">+  VH RAW RECTIFIED RAIL (Clamped at 5.1V by Zener 1N4733A)</text>
+
+    <rect x="24" y="88" width="842" height="22" rx="4" fill="#e0f2fe" stroke="#93c5fd"/>
+    <line x1="40" y1="99" x2="846" y2="99" stroke="#0284c7" stroke-width="3"/>
+    <text x="48" y="103" fill="#075985" font-size="11" font-weight="800">−  COMMON GROUND RAIL (GND) — Connects Tile Brass, Rectifier, Caps, Sign (-), &amp; ESP32 GND</text>
+
+    <!-- STAGE 2A: 4-Diode Schottky Rectifier -->
+    <g transform="translate(26, 126)">
+      <rect width="265" height="265" rx="10" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
+      <rect width="265" height="28" rx="10" fill="#eef4ea"/>
+      <text x="12" y="19" fill="#172e1c" font-size="11" font-weight="800">2A. SCHOTTKY BRIDGE (4x 1N5819)</text>
+
+      <circle cx="34" cy="82" r="14" fill="#9333ea"/>
+      <text x="34" y="86" fill="#fff" font-size="9" font-weight="800" text-anchor="middle">AC1</text>
+      <text x="54" y="86" fill="#475569" font-size="10" font-weight="700">Row 10</text>
+
+      <circle cx="34" cy="182" r="14" fill="#9333ea"/>
+      <text x="34" y="186" fill="#fff" font-size="9" font-weight="800" text-anchor="middle">AC2</text>
+      <text x="54" y="186" fill="#475569" font-size="10" font-weight="700">Row 15</text>
+
+      <!-- D3 & D4 to VH -->
+      <rect x="130" y="54" width="76" height="18" rx="4" fill="#1e293b"/>
+      <rect x="190" y="54" width="10" height="18" fill="#cbd5e1"/>
+      <text x="160" y="66" fill="#fff" font-size="8" font-weight="700" text-anchor="middle">D3 1N5819</text>
+      <text x="130" y="84" fill="#dc2626" font-size="9" font-weight="800">Stripe ➔ VH (+)</text>
+
+      <rect x="130" y="108" width="76" height="18" rx="4" fill="#1e293b"/>
+      <rect x="190" y="108" width="10" height="18" fill="#cbd5e1"/>
+      <text x="160" y="120" fill="#fff" font-size="8" font-weight="700" text-anchor="middle">D4 1N5819</text>
+      <text x="130" y="138" fill="#dc2626" font-size="9" font-weight="800">Stripe ➔ VH (+)</text>
+
+      <!-- D1 & D2 from GND -->
+      <rect x="130" y="164" width="76" height="18" rx="4" fill="#1e293b"/>
+      <rect x="190" y="164" width="10" height="18" fill="#cbd5e1"/>
+      <text x="160" y="176" fill="#fff" font-size="8" font-weight="700" text-anchor="middle">D1 1N5819</text>
+      <text x="128" y="194" fill="#0284c7" font-size="9" font-weight="800">GND ➔ Stripe AC1</text>
+
+      <rect x="130" y="216" width="76" height="18" rx="4" fill="#1e293b"/>
+      <rect x="190" y="216" width="10" height="18" fill="#cbd5e1"/>
+      <text x="160" y="228" fill="#fff" font-size="8" font-weight="700" text-anchor="middle">D2 1N5819</text>
+      <text x="128" y="246" fill="#0284c7" font-size="9" font-weight="800">GND ➔ Stripe AC2</text>
+
+      <!-- Bridge wiring -->
+      <path d="M 48 82 H 112 V 63 H 130" fill="none" stroke="#9333ea" stroke-width="2"/>
+      <path d="M 48 182 H 104 V 117 H 130" fill="none" stroke="#9333ea" stroke-width="2"/>
+      <path d="M 206 63 H 235 V -55" fill="none" stroke="#ef4444" stroke-width="2.5" marker-end="url(#arrRed)"/>
+      <path d="M 206 117 H 248 V -55" fill="none" stroke="#ef4444" stroke-width="2.5" marker-end="url(#arrRed)"/>
+      <path d="M 130 173 H 92 V -27" fill="none" stroke="#0284c7" stroke-width="2"/>
+      <path d="M 130 225 H 82 V -27" fill="none" stroke="#0284c7" stroke-width="2"/>
+    </g>
+
+    <!-- STAGE 2B: Protection & Dual Storage Bank -->
+    <g transform="translate(306, 126)">
+      <rect width="295" height="265" rx="10" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
+      <rect width="295" height="28" rx="10" fill="#eef4ea"/>
+      <text x="12" y="19" fill="#172e1c" font-size="11" font-weight="800">2B. ZENER CLAMP, D5 &amp; STORAGE BANK</text>
+
+      <!-- 5.1V Zener -->
+      <rect x="18" y="48" width="115" height="62" rx="6" fill="#fff1f2" stroke="#fda4af"/>
+      <text x="26" y="66" fill="#9f1239" font-size="10" font-weight="800">5.1V Zener (1N4733A)</text>
+      <text x="26" y="82" fill="#be123c" font-size="9">Stripe ➔ VH (+) | Plain ➔ GND</text>
+      <text x="26" y="98" fill="#64748b" font-size="9">Shunts &gt;5.1V spikes safely</text>
+
+      <!-- 470uF Stage 1 Tank -->
+      <rect x="148" y="48" width="132" height="62" rx="6" fill="#eff6ff" stroke="#93c5fd"/>
+      <text x="156" y="66" fill="#1e40af" font-size="10" font-weight="800">Stage 1: 470µF / 25V</text>
+      <text x="156" y="82" fill="#1d4ed8" font-size="9">(+) ➔ VH | (−) ➔ GND</text>
+      <text x="156" y="98" fill="#64748b" font-size="9">Absorbs high-speed spikes</text>
+
+      <!-- Reverse-blocking D5 + Charging Path Selector -->
+      <rect x="18" y="124" width="262" height="58" rx="6" fill="#f0fdf4" stroke="#86efac"/>
+      <text x="28" y="142" fill="#166534" font-size="10" font-weight="800">D5 (1N5819) Check Valve + Path A/B Switch</text>
+      <text x="28" y="158" fill="#15803d" font-size="9">VH (+) ➔ [D5 Stripe] ➔ Path A (Direct) / Path B (5V Reg)</text>
+      <text x="28" y="173" fill="#475569" font-size="9">Blocks energy from leaking back into piezo bridge</text>
+
+      <!-- Stage 2 Main Reservoir + 500mA Polyfuse -->
+      <rect x="18" y="194" width="150" height="58" rx="6" fill="#0f172a" stroke="#334155"/>
+      <text x="28" y="213" fill="#38bdf8" font-size="10" font-weight="800">Stage 2: 6,600µF / 16V</text>
+      <text x="28" y="229" fill="#e2e8f0" font-size="9">or 5.5V / 0.47F–1.0F Cap</text>
+      <text x="28" y="244" fill="#86efac" font-size="9">(+) VSC Rail | (−) GND</text>
+
+      <rect x="178" y="194" width="102" height="58" rx="6" fill="#fffbeb" stroke="#fbbf24"/>
+      <text x="186" y="213" fill="#92400e" font-size="10" font-weight="800">500mA PTC</text>
+      <text x="186" y="229" fill="#b45309" font-size="9">Resettable Fuse</text>
+      <text x="186" y="244" fill="#78350f" font-size="9">Short-circuit safe</text>
+
+      <path d="M 75 48 V -55" fill="none" stroke="#ef4444" stroke-width="2"/>
+      <path d="M 215 48 V -55" fill="none" stroke="#ef4444" stroke-width="2"/>
+    </g>
+
+    <!-- STAGE 2C: Physical Voltage Dividers for ESP32 (Right Side of Breadboard) -->
+    <g transform="translate(616, 126)">
+      <rect width="248" height="265" rx="10" fill="#fff7ed" stroke="#fdba74" stroke-width="1.5"/>
+      <rect width="248" height="28" rx="10" fill="#ffedd5"/>
+      <text x="12" y="19" fill="#9a3412" font-size="11" font-weight="800">2C. ESP32 SAFE DIVIDERS (≤3.3V)</text>
+
+      <!-- Divider 1: V_gen -> D35 -->
+      <rect x="12" y="38" width="224" height="66" rx="6" fill="#ffffff" stroke="#fed7aa"/>
+      <text x="20" y="54" fill="#c2410c" font-size="10" font-weight="800">1. V_gen Sense (4.3x) ➔ D35</text>
+      <text x="20" y="70" fill="#334155" font-size="9">VH ──[ 3.3 MΩ ]──┬──[ 1.0 MΩ ]── GND</text>
+      <text x="20" y="84" fill="#ea580c" font-size="9" font-weight="700">                 └── (+100nF to GND) ➔ D35</text>
+      <text x="20" y="98" fill="#64748b" font-size="8">Scales 0–14V safely down to 0–3.25V</text>
+
+      <!-- Divider 2: V_cap -> D32 -->
+      <rect x="12" y="112" width="224" height="66" rx="6" fill="#ffffff" stroke="#fed7aa"/>
+      <text x="20" y="128" fill="#c2410c" font-size="10" font-weight="800">2. V_cap Sense (2.5x) ➔ D32</text>
+      <text x="20" y="144" fill="#334155" font-size="9">VSC ──[ 1.5 MΩ ]──┬──[ 1.0 MΩ ]── GND</text>
+      <text x="20" y="158" fill="#ea580c" font-size="9" font-weight="700">                  └── (+100nF to GND) ➔ D32</text>
+      <text x="20" y="172" fill="#64748b" font-size="8">Scales 0–5.5V safely down to 0–2.20V</text>
+
+      <!-- Divider 3: Trigger -> D34 -->
+      <rect x="12" y="186" width="224" height="66" rx="6" fill="#f0f9ff" stroke="#7dd3fc"/>
+      <text x="20" y="202" fill="#0369a1" font-size="10" font-weight="800">3. Step Trigger ➔ D34</text>
+      <text x="20" y="218" fill="#334155" font-size="9">Trig ──[ 100 kΩ ]──┬──[ 1.0 MΩ ]── GND</text>
+      <text x="20" y="232" fill="#0284c7" font-size="9" font-weight="700">                   └── ➔ D34 (INT0 Pulse)</text>
+      <text x="20" y="246" fill="#64748b" font-size="8">Triggers hardware step count + 250ms debounce</text>
+    </g>
+
+    <!-- Breadboard Center Trench -->
+    <rect x="24" y="406" width="842" height="16" rx="4" fill="#cbd5e1"/>
+    <text x="445" y="418" fill="#475569" font-size="9" font-weight="800" text-anchor="middle">BREADBOARD ISOLATION CHANNEL • POWER BUS TO LOAD STAGE</text>
+
+    <!-- ===================================================================== -->
+    <!-- STAGE 3: "I ❤️ QCU!" 18-LED EMERGENCY EVACUATION SIGN + FULL/DIM SW2  -->
+    <!-- ===================================================================== -->
+    <g transform="translate(26, 438)">
+      <rect width="838" height="546" rx="12" fill="#ffffff" stroke="#84a973" stroke-width="2"/>
+      <rect width="838" height="34" rx="12" fill="#3f7d2b"/>
+      <text x="16" y="23" fill="#ffffff" font-size="13" font-weight="800">3. ON-DEMAND OUTPUT LOAD: "I ❤️ QCU!" RECYCLED 18-LED EVACUATION SIGN (IPT2 TABLE 3 &amp; FIGURE 5)</text>
+
+      <!-- SW1 + SW2 Branch Control Box -->
+      <g transform="translate(20, 52)">
+        <rect width="798" height="118" rx="10" fill="#f7faf4" stroke="#cfe0c6"/>
+        <text x="16" y="22" fill="#172e1c" font-size="12" font-weight="800">Discharge &amp; Brightness Selector (From VSC Storage / 5V Regulated Rail via 500mA Polyfuse)</text>
+
+        <!-- SW1 -->
+        <rect x="16" y="38" width="165" height="64" rx="8" fill="#1e293b"/>
+        <text x="98" y="60" fill="#f8fafc" font-size="11" font-weight="800" text-anchor="middle">SW1: CHARGE / FIRE</text>
+        <text x="98" y="77" fill="#fbbf24" font-size="9" text-anchor="middle">OFF = Charge Cap Bank</text>
+        <text x="98" y="92" fill="#86efac" font-size="9" text-anchor="middle">ON = Power Sign Load</text>
+
+        <!-- Wire SW1 to SW2 -->
+        <line x1="181" y1="70" x2="235" y2="70" stroke="#ef4444" stroke-width="3" marker-end="url(#arrRed)"/>
+
+        <!-- SW2 Full vs Dim -->
+        <rect x="240" y="38" width="320" height="64" rx="8" fill="#fffbeb" stroke="#f59e0b" stroke-width="1.5"/>
+        <text x="252" y="56" fill="#9a3412" font-size="11" font-weight="800">SW2: SIGN MODE RESISTOR BRANCH</text>
+        <rect x="252" y="64" width="142" height="30" rx="5" fill="#f5820d"/>
+        <text x="323" y="83" fill="#ffffff" font-size="10" font-weight="800" text-anchor="middle">FULL: 1.5 kΩ (Bright)</text>
+        <rect x="404" y="64" width="144" height="30" rx="5" fill="#3f7d2b"/>
+        <text x="476" y="83" fill="#ffffff" font-size="10" font-weight="800" text-anchor="middle">DIM: 10 kΩ (Eco Save)</text>
+
+        <!-- Optional ESP32 D19 PWM MOSFET -->
+        <rect x="580" y="38" width="204" height="64" rx="8" fill="#f0f9ff" stroke="#38bdf8"/>
+        <text x="592" y="56" fill="#0369a1" font-size="10" font-weight="800">Optional Auto PWM (D19)</text>
+        <text x="592" y="73" fill="#334155" font-size="9">2N2222 / MOSFET on low side</text>
+        <text x="592" y="88" fill="#0284c7" font-size="9" font-weight="700">100% burst on step ➔ 20% dim</text>
+      </g>
+
+      <!-- Visual "I ❤️ QCU!" 18-LED Sign Board -->
+      <g transform="translate(20, 186)">
+        <rect width="798" height="270" rx="14" fill="#132117" stroke="#3f7d2b" stroke-width="2"/>
+        <text x="24" y="28" fill="#86efac" font-size="12" font-weight="800">RECYCLED HOLIDAY MICRO-LED SIGN BOARD — 18 LEDs TOTAL (2.8V–5V DC BUS)</text>
+        <text x="595" y="28" fill="#fde68a" font-size="11" font-weight="700">Formula: P_mw = 5V × I_load (mA)</text>
+
+        <!-- "I" (3 White/Yellow LEDs) -->
+        <g transform="translate(55, 55)">
+          <rect width="120" height="165" rx="10" fill="#1a2c1f" stroke="#2f4d36"/>
+          <text x="60" y="22" fill="#e2e8f0" font-size="11" font-weight="800" text-anchor="middle">"I" (3 LEDs)</text>
+          <circle cx="60" cy="54" r="11" fill="#fef08a" filter="url(#glowAmber)"/>
+          <circle cx="60" cy="94" r="11" fill="#fef08a" filter="url(#glowAmber)"/>
+          <circle cx="60" cy="134" r="11" fill="#fef08a" filter="url(#glowAmber)"/>
+          <line x1="60" y1="65" x2="60" y2="83" stroke="#94a3b8" stroke-width="2"/>
+          <line x1="60" y1="105" x2="60" y2="123" stroke="#94a3b8" stroke-width="2"/>
+        </g>
+
+        <!-- "❤️" (6 Red LEDs) -->
+        <g transform="translate(205, 55)">
+          <rect width="200" height="165" rx="10" fill="#2a1417" stroke="#b91c1c"/>
+          <text x="100" y="22" fill="#fca5a5" font-size="11" font-weight="800" text-anchor="middle">"❤️" (6 Red LEDs)</text>
+          <!-- Heart shaped 6 LEDs -->
+          <circle cx="72" cy="58" r="11" fill="#ef4444" filter="url(#glowRed)"/>
+          <circle cx="128" cy="58" r="11" fill="#ef4444" filter="url(#glowRed)"/>
+          <circle cx="54" cy="92" r="11" fill="#ef4444" filter="url(#glowRed)"/>
+          <circle cx="100" cy="86" r="11" fill="#ef4444" filter="url(#glowRed)"/>
+          <circle cx="146" cy="92" r="11" fill="#ef4444" filter="url(#glowRed)"/>
+          <circle cx="100" cy="132" r="11" fill="#ef4444" filter="url(#glowRed)"/>
+        </g>
+
+        <!-- "Q C U" (9 Green LEDs) -->
+        <g transform="translate(435, 55)">
+          <rect width="330" height="165" rx="10" fill="#142919" stroke="#559632"/>
+          <text x="165" y="22" fill="#bbf7d0" font-size="11" font-weight="800" text-anchor="middle">"Q C U" (9 Green / White LEDs — 3 per Letter)</text>
+          <!-- Q -->
+          <text x="65" y="54" fill="#86efac" font-size="14" font-weight="900" text-anchor="middle">Q</text>
+          <circle cx="48" cy="78" r="9" fill="#4ade80" filter="url(#glowGreen)"/>
+          <circle cx="82" cy="78" r="9" fill="#4ade80" filter="url(#glowGreen)"/>
+          <circle cx="65" cy="120" r="9" fill="#4ade80" filter="url(#glowGreen)"/>
+          <!-- C -->
+          <text x="165" y="54" fill="#86efac" font-size="14" font-weight="900" text-anchor="middle">C</text>
+          <circle cx="165" cy="72" r="9" fill="#4ade80" filter="url(#glowGreen)"/>
+          <circle cx="146" cy="102" r="9" fill="#4ade80" filter="url(#glowGreen)"/>
+          <circle cx="165" cy="132" r="9" fill="#4ade80" filter="url(#glowGreen)"/>
+          <!-- U -->
+          <text x="265" y="54" fill="#86efac" font-size="14" font-weight="900" text-anchor="middle">U</text>
+          <circle cx="246" cy="80" r="9" fill="#4ade80" filter="url(#glowGreen)"/>
+          <circle cx="284" cy="80" r="9" fill="#4ade80" filter="url(#glowGreen)"/>
+          <circle cx="265" cy="126" r="9" fill="#4ade80" filter="url(#glowGreen)"/>
+        </g>
+
+        <text x="24" y="248" fill="#cbd5e1" font-size="11" font-weight="700">Anodes (+) ➔ From SW2 Resistor Output (1.5kΩ / 10kΩ)     |     Cathodes (−) ➔ Return to Breadboard Common GND (−) Rail</text>
+      </g>
+
+      <!-- Bottom Quick Math Strip -->
+      <g transform="translate(20, 470)">
+        <rect width="798" height="58" rx="8" fill="#eef4ea" stroke="#cfe0c6"/>
+        <text x="16" y="24" fill="#172e1c" font-size="11" font-weight="800">IPT2 Sign Test Verification Reference (Table 3):</text>
+        <text x="16" y="44" fill="#3f7d2b" font-size="11" font-weight="700">• Full Mode (1.5 kΩ): ~25 mA ➔ P = 5V × 25mA = 125 mW (~9.4s pure PZT / ~3.5+ min supercap)     • Dim Mode (10 kΩ): ~3.5 mA ➔ 17.5 mW (3–30+ min)</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- ======================================================================= -->
+  <!-- STAGE 4 & 5: ESP32-WROOM-32 (30-PIN) ➔ USB-C ➔ LAPTOP APP & POSTGRESQL  -->
+  <!-- ======================================================================= -->
+  <g transform="translate(1320, 130)">
+    <rect width="370" height="1010" rx="14" fill="#132117" stroke="#28472e" stroke-width="1.5" filter="url(#cardShadow)"/>
+    <rect width="370" height="44" rx="14" fill="#1b3420"/>
+    <text x="18" y="28" fill="#86efac" font-size="14" font-weight="800">4. ESP32-WROOM-32 &amp; 5. LAPTOP PC</text>
+
+    <!-- 30-Pin ESP32 Board Matching User Photo -->
+    <g transform="translate(45, 66)">
+      <rect width="280" height="390" rx="12" fill="#1c2420" stroke="#559632" stroke-width="2"/>
+      <!-- PCB Antenna -->
+      <rect x="65" y="10" width="150" height="36" rx="4" fill="#111815" stroke="#475569"/>
+      <path d="M 85 38 V 18 H 105 V 32 H 125 V 18 H 145 V 32 H 165 V 18 H 195" fill="none" stroke="#d97706" stroke-width="2"/>
+      <!-- RF Shield -->
+      <rect x="65" y="54" width="150" height="128" rx="6" fill="url(#espShield)" stroke="#475569"/>
+      <text x="140" y="108" fill="#0f172a" font-size="16" font-weight="900" text-anchor="middle">ESP32</text>
+      <text x="140" y="128" fill="#1e293b" font-size="10" font-weight="700" text-anchor="middle">ESP-WROOM-32</text>
+      <text x="140" y="144" fill="#334155" font-size="9" font-weight="700" text-anchor="middle">(ESP32-D0WD-V3)</text>
+
+      <!-- Left Header Pins (Top-to-Bottom matching photo: EN..D32..GND..VIN) -->
+      <text x="14" y="88" fill="#94a3b8" font-size="10" font-weight="700">3V3</text>
+      <circle cx="4" cy="85" r="4" fill="#ef4444"/>
+
+      <text x="14" y="120" fill="#cbd5e1" font-size="10" font-weight="800">GND</text>
+      <circle cx="4" cy="117" r="4" fill="#64748b"/>
+
+      <text x="14" y="156" fill="#38bdf8" font-size="11" font-weight="800">D34 (Trigger)</text>
+      <circle cx="4" cy="153" r="4.5" fill="#38bdf8"/>
+
+      <text x="14" y="192" fill="#f59e0b" font-size="11" font-weight="800">D35 (V_gen)</text>
+      <circle cx="4" cy="189" r="4.5" fill="#f59e0b"/>
+
+      <text x="14" y="228" fill="#f59e0b" font-size="11" font-weight="800">D32 (V_cap)</text>
+      <circle cx="4" cy="225" r="4.5" fill="#f59e0b"/>
+
+      <!-- Right Header Pins -->
+      <text x="264" y="120" fill="#cbd5e1" font-size="10" font-weight="800" text-anchor="end">GND</text>
+      <circle cx="276" cy="117" r="4" fill="#64748b"/>
+
+      <text x="264" y="156" fill="#60a5fa" font-size="11" font-weight="800" text-anchor="end">D2 (Blue LED)</text>
+      <circle cx="276" cy="153" r="4" fill="#60a5fa"/>
+
+      <text x="264" y="192" fill="#38bdf8" font-size="11" font-weight="800" text-anchor="end">D19 (Sign PWM)</text>
+      <circle cx="276" cy="189" r="4.5" fill="#38bdf8"/>
+
+      <!-- Onboard LEDs & Buttons -->
+      <circle cx="215" cy="260" r="6" fill="#3b82f6"/>
+      <text x="215" y="278" fill="#93c5fd" font-size="9" font-weight="700" text-anchor="middle">D2 LED</text>
+
+      <circle cx="70" cy="260" r="6" fill="#ef4444"/>
+      <text x="70" y="278" fill="#fca5a5" font-size="9" font-weight="700" text-anchor="middle">PWR</text>
+
+      <!-- BOOT & EN buttons -->
+      <rect x="44" y="316" width="38" height="24" rx="4" fill="#334155" stroke="#94a3b8"/>
+      <text x="63" y="332" fill="#fff" font-size="8" font-weight="800" text-anchor="middle">BOOT</text>
+
+      <rect x="198" y="316" width="38" height="24" rx="4" fill="#334155" stroke="#94a3b8"/>
+      <text x="217" y="332" fill="#fff" font-size="8" font-weight="800" text-anchor="middle">EN</text>
+
+      <!-- USB-C Port -->
+      <rect x="102" y="366" width="76" height="28" rx="5" fill="#cbd5e1" stroke="#475569" stroke-width="2"/>
+      <text x="140" y="384" fill="#0f172a" font-size="10" font-weight="900" text-anchor="middle">USB-C (CH340)</text>
+    </g>
+
+    <!-- USB-C Cable down to Laptop -->
+    <line x1="185" y1="484" x2="185" y2="554" stroke="#38bdf8" stroke-width="5" marker-end="url(#arrCyan)"/>
+    <rect x="100" y="502" width="170" height="24" rx="12" fill="#0f293a" stroke="#38bdf8"/>
+    <text x="185" y="518" fill="#bae6fd" font-size="10" font-weight="800" text-anchor="middle">115,200 Baud CSV (COM10)</text>
+
+    <!-- Stage 5: Laptop Workstation -->
+    <g transform="translate(22, 562)">
+      <rect width="326" height="295" rx="12" fill="#0b130e" stroke="#559632" stroke-width="2"/>
+      <rect width="326" height="32" rx="12" fill="#3f7d2b"/>
+      <text x="16" y="21" fill="#ffffff" font-size="12" font-weight="800">5. HOST LAPTOP (ecostep_app)</text>
+
+      <text x="16" y="54" fill="#86efac" font-size="11" font-weight="800">Incoming ESP32 CSV Stream:</text>
+      <rect x="16" y="62" width="294" height="28" rx="6" fill="#172e1c"/>
+      <text x="26" y="80" fill="#fde68a" font-family="Consolas" font-size="11" font-weight="700">DATA,14,842,11.68</text>
+
+      <text x="16" y="112" fill="#cbd5e1" font-size="11" font-weight="800">Python CustomTkinter Desktop App:</text>
+      <text x="16" y="130" fill="#9db3a0" font-size="10">• Live Kinetic Meter + 4x4 Tile Indicator</text>
+      <text x="16" y="146" fill="#9db3a0" font-size="10">• Time Horizons: 1H, 10H Shift, 24H, 48H, 7D</text>
+      <text x="16" y="162" fill="#9db3a0" font-size="10">• Battery SoC % + Device Equivalences</text>
+      <text x="16" y="178" fill="#9db3a0" font-size="10">• 100-Step Runs, 5V Sign Tests, Components</text>
+
+      <rect x="16" y="196" width="294" height="84" rx="8" fill="#152836" stroke="#38bdf8"/>
+      <text x="28" y="216" fill="#7dd3fc" font-size="11" font-weight="800">PostgreSQL 18 (ecostep_qcu_db)</text>
+      <text x="28" y="234" fill="#e2e8f0" font-size="10">localhost:5433 (or 5432) • 4 Tables (3NF):</text>
+      <text x="28" y="250" fill="#bae6fd" font-size="10">components, measurement_runs,</text>
+      <text x="28" y="266" fill="#bae6fd" font-size="10">telemetry_logs, sign_tests</text>
+    </g>
+
+    <!-- Tile Mode Reminder -->
+    <g transform="translate(22, 874)">
+      <rect width="326" height="116" rx="10" fill="#1a2c1f" stroke="#f59e0b"/>
+      <text x="14" y="24" fill="#fbbf24" font-size="11" font-weight="800">WHEN PHYSICAL TILE IS WIRED:</text>
+      <text x="14" y="44" fill="#e2e8f0" font-size="10">1. Verify D34/D35/D32 ≤ 3.3V on multimeter.</text>
+      <text x="14" y="60" fill="#e2e8f0" font-size="10">2. Plug ESP32 USB-C into laptop (0% tile drain).</text>
+      <text x="14" y="76" fill="#e2e8f0" font-size="10">3. Open EcoStep App ➔ Connect Telemetry.</text>
+      <text x="14" y="92" fill="#86efac" font-size="10" font-weight="700">4. Click [Tile ADC] button (or set</text>
+      <text x="14" y="106" fill="#86efac" font-size="10" font-weight="700">   HARDWARE_SENSORS = True in main.py).</text>
+    </g>
+  </g>
+
+  <!-- ======================================================================= -->
+  <!-- CROSS-STAGE CONNECTING LINES (TILE ➔ BREADBOARD ➔ ESP32)                -->
+  <!-- ======================================================================= -->
+  <!-- AC1 & AC2 from Tile to Breadboard -->
+  <path d="M 350 420 C 375 420, 395 338, 446 338" fill="none" stroke="#c084fc" stroke-width="3" stroke-dasharray="7 4" marker-end="url(#arrPurple)"/>
+  <path d="M 350 464 C 380 464, 395 438, 446 438" fill="none" stroke="#c084fc" stroke-width="3" stroke-dasharray="7 4" marker-end="url(#arrPurple)"/>
+
+  <!-- Sensor Disc #17 -> Divider 3 -> ESP32 D34 -->
+  <path d="M 350 865 C 370 865, 385 1152, 1306 1152 C 1320 1152, 1330 349, 1365 349" fill="none" stroke="#38bdf8" stroke-width="3" marker-end="url(#arrCyan)"/>
+
+  <!-- Divider 1 (V_gen) -> ESP32 D35 -->
+  <path d="M 1252 336 C 1300 336, 1315 385, 1365 385" fill="none" stroke="#f59e0b" stroke-width="3" marker-end="url(#arrAmber)"/>
+
+  <!-- Divider 2 (V_cap) -> ESP32 D32 -->
+  <path d="M 1252 410 C 1305 410, 1315 421, 1365 421" fill="none" stroke="#f59e0b" stroke-width="3" marker-end="url(#arrAmber)"/>
+
+  <!-- Common GND Rail -> ESP32 GND -->
+  <path d="M 1266 229 H 1335 V 313 H 1365" fill="none" stroke="#64748b" stroke-width="3"/>
+</svg>

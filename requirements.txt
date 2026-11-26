@@ -1,0 +1,6 @@
+customtkinter>=6.0.0
+psycopg2-binary>=2.9.10
+sqlalchemy>=2.0.0
+pyserial>=3.5
+matplotlib>=3.8.0
+pillow>=10.0.0
