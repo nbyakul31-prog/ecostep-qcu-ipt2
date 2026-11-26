@@ -85,11 +85,10 @@
     <div class="card">
       <h2>3. ESP32-WROOM-32 Safe Sensing &amp; PC Link</h2>
       <ul>
-        <li><strong>Common Ground:</strong> Wire breadboard <code>GND</code> directly to ESP32 <code>GND</code>.</li>
-        <li><strong>D35 (V_gen):</strong> <code>3.3 MΩ</code> (top) + <code>1.0 MΩ</code> (bottom) + <code>100 nF</code> cap to GND.</li>
-        <li><strong>D32 (V_cap):</strong> <code>1.5 MΩ</code> (top) + <code>1.0 MΩ</code> (bottom) + <code>100 nF</code> cap to GND.</li>
-        <li><strong>D34 (Trigger):</strong> Isolated Disc #17 through <code>100 kΩ / 1.0 MΩ</code> divider (or microswitch + <code>10 kΩ</code> pull-up to <code>3V3</code>).</li>
-        <li><strong>USB-C Cable:</strong> Powers ESP32 from laptop (0% drain on tile) and streams <code>DATA,step,adc_raw,volts</code> to <code>ecostep_app</code>.</li>
+        <li><strong>Common Ground:</strong> Wire Supercap <code>(-)</code>, 2 Dummy Piezos <code>(-)</code>, and breadboard <code>GND</code> directly to ESP32 <code>GND</code>.</li>
+        <li><strong>D34 (Supercap Voltage):</strong> Supercap <code>(+)</code> ➔ <code>100 kΩ</code> ➔ <code>D34</code> ➔ <code>100 kΩ</code> ➔ <code>GND</code> (<code>2.0x</code> divider).</li>
+        <li><strong>D32 (Step Counter):</strong> 2 Dummy Piezos <code>(+)</code> joined ➔ <code>D32</code>, with <code>1 MΩ</code> bleed + <code>3.3V Zener</code> (stripe on top) to <code>GND</code>.</li>
+        <li><strong>USB-C Cable:</strong> Powers ESP32 from laptop (0% drain on tile) and streams <code>DATA,step,adc_raw,v_cap</code> to <code>ecostep_app</code>.</li>
       </ul>
     </div>
   </div>

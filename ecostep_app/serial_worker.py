@@ -140,6 +140,13 @@ class SerialTelemetryWorker:
                 )
             except ValueError:
                 pass
+        elif tag == "CAP" and len(parts) >= 3:
+            try:
+                adc_raw = max(0, min(1023, int(parts[1])))
+                adc_volts = float(parts[2])
+                self._push({"kind": "cap", "adc_raw": adc_raw, "adc_voltage": adc_volts, "raw_line": line})
+            except ValueError:
+                pass
         elif tag == "READY" and len(parts) >= 2:
             self.board_mode = parts[1]
             self._push({"kind": "status", "mode": self.board_mode, "raw_line": line})

@@ -147,16 +147,16 @@
     <!-- Isolated Step-Sensor Disc #17 -->
     <g transform="translate(20, 652)">
       <rect width="300" height="215" rx="10" fill="#1a2c1f" stroke="#0ea5e9"/>
-      <text x="14" y="24" fill="#38bdf8" font-size="12" font-weight="800">Isolated Trigger Sensor (Disc #17)</text>
-      <text x="14" y="40" fill="#9db3a0" font-size="10">Separate from power matrix (or microswitch)</text>
+      <text x="14" y="24" fill="#38bdf8" font-size="12" font-weight="800">2 Dummy Piezos (Step Sensor)</text>
+      <text x="14" y="40" fill="#9db3a0" font-size="10">Separate from charging matrix (D32)</text>
 
       <circle cx="62" cy="94" r="32" fill="url(#brassGrad)"/>
       <circle cx="62" cy="94" r="20" fill="#f8fafc"/>
-      <text x="62" y="98" fill="#0369a1" font-size="9" font-weight="800" text-anchor="middle">TRIG</text>
+      <text x="62" y="98" fill="#0369a1" font-size="9" font-weight="800" text-anchor="middle">2x PZT</text>
 
-      <text x="110" y="76" fill="#bae6fd" font-size="11" font-weight="700">Center ➔ 100kΩ/1MΩ Divider</text>
-      <text x="110" y="94" fill="#38bdf8" font-size="11" font-weight="800">➔ ESP32 D34 (INT0)</text>
-      <text x="110" y="116" fill="#cbd5e1" font-size="11" font-weight="700">Brass Rim ➔ Common GND</text>
+      <text x="110" y="76" fill="#bae6fd" font-size="11" font-weight="700">(+) Joined ➔ D32 + 1MΩ</text>
+      <text x="110" y="94" fill="#38bdf8" font-size="11" font-weight="800">+ 3.3V Zener (Stripe top)</text>
+      <text x="110" y="116" fill="#cbd5e1" font-size="11" font-weight="700">(−) Joined ➔ Common GND</text>
 
       <rect x="14" y="144" width="272" height="58" rx="6" fill="#112017" stroke="#28472e"/>
       <text x="24" y="164" fill="#86efac" font-size="10" font-weight="700">Optional Microswitch Alternative:</text>
@@ -282,28 +282,22 @@
     <g transform="translate(616, 126)">
       <rect width="248" height="265" rx="10" fill="#fff7ed" stroke="#fdba74" stroke-width="1.5"/>
       <rect width="248" height="28" rx="10" fill="#ffedd5"/>
-      <text x="12" y="19" fill="#9a3412" font-size="11" font-weight="800">2C. ESP32 SAFE DIVIDERS (≤3.3V)</text>
+      <text x="12" y="19" fill="#9a3412" font-size="11" font-weight="800">2C. ESP32 SAFE SENSING (≤3.3V)</text>
 
-      <!-- Divider 1: V_gen -> D35 -->
-      <rect x="12" y="38" width="224" height="66" rx="6" fill="#ffffff" stroke="#fed7aa"/>
-      <text x="20" y="54" fill="#c2410c" font-size="10" font-weight="800">1. V_gen Sense (4.3x) ➔ D35</text>
-      <text x="20" y="70" fill="#334155" font-size="9">VH ──[ 3.3 MΩ ]──┬──[ 1.0 MΩ ]── GND</text>
-      <text x="20" y="84" fill="#ea580c" font-size="9" font-weight="700">                 └── (+100nF to GND) ➔ D35</text>
-      <text x="20" y="98" fill="#64748b" font-size="8">Scales 0–14V safely down to 0–3.25V</text>
+      <!-- Divider 1: Supercapacitor V_cap -> D34 -->
+      <rect x="12" y="42" width="224" height="92" rx="6" fill="#ffffff" stroke="#fed7aa"/>
+      <text x="20" y="60" fill="#c2410c" font-size="10" font-weight="800">1. Supercap Voltage (2x) ➔ D34</text>
+      <text x="20" y="78" fill="#334155" font-size="9">Cap(+) ──[ 100 kΩ ]──┬──[ 100 kΩ ]── GND</text>
+      <text x="20" y="94" fill="#ea580c" font-size="9" font-weight="700">                     └──▶ ESP32 D34 (ADC1)</text>
+      <text x="20" y="112" fill="#64748b" font-size="8">Scales 0–5.5V safely to 0–2.75V (×2.0 in code)</text>
 
-      <!-- Divider 2: V_cap -> D32 -->
-      <rect x="12" y="112" width="224" height="66" rx="6" fill="#ffffff" stroke="#fed7aa"/>
-      <text x="20" y="128" fill="#c2410c" font-size="10" font-weight="800">2. V_cap Sense (2.5x) ➔ D32</text>
-      <text x="20" y="144" fill="#334155" font-size="9">VSC ──[ 1.5 MΩ ]──┬──[ 1.0 MΩ ]── GND</text>
-      <text x="20" y="158" fill="#ea580c" font-size="9" font-weight="700">                  └── (+100nF to GND) ➔ D32</text>
-      <text x="20" y="172" fill="#64748b" font-size="8">Scales 0–5.5V safely down to 0–2.20V</text>
-
-      <!-- Divider 3: Trigger -> D34 -->
-      <rect x="12" y="186" width="224" height="66" rx="6" fill="#f0f9ff" stroke="#7dd3fc"/>
-      <text x="20" y="202" fill="#0369a1" font-size="10" font-weight="800">3. Step Trigger ➔ D34</text>
-      <text x="20" y="218" fill="#334155" font-size="9">Trig ──[ 100 kΩ ]──┬──[ 1.0 MΩ ]── GND</text>
-      <text x="20" y="232" fill="#0284c7" font-size="9" font-weight="700">                   └── ➔ D34 (INT0 Pulse)</text>
-      <text x="20" y="246" fill="#64748b" font-size="8">Triggers hardware step count + 250ms debounce</text>
+      <!-- Divider 2: 2 Dummy Piezos -> D32 -->
+      <rect x="12" y="148" width="224" height="98" rx="6" fill="#f0f9ff" stroke="#7dd3fc"/>
+      <text x="20" y="166" fill="#0369a1" font-size="10" font-weight="800">2. Step Counter (2 Piezos) ➔ D32</text>
+      <text x="20" y="184" fill="#334155" font-size="9">2 Piezos(+) ──┬──┬──▶ ESP32 D32 (ADC1)</text>
+      <text x="20" y="200" fill="#0284c7" font-size="9" font-weight="700">            [1MΩ] [3.3V Zener] (Stripe top)</text>
+      <text x="20" y="216" fill="#334155" font-size="9">2 Piezos(−) ──┴──┴──▶ ESP32 GND</text>
+      <text x="20" y="232" fill="#64748b" font-size="8">Clamped ≤3.3V; 250ms debounce in main.py</text>
     </g>
 
     <!-- Breadboard Center Trench -->
@@ -437,14 +431,14 @@
       <text x="14" y="120" fill="#cbd5e1" font-size="10" font-weight="800">GND</text>
       <circle cx="4" cy="117" r="4" fill="#64748b"/>
 
-      <text x="14" y="156" fill="#38bdf8" font-size="11" font-weight="800">D34 (Trigger)</text>
-      <circle cx="4" cy="153" r="4.5" fill="#38bdf8"/>
+      <text x="14" y="156" fill="#f59e0b" font-size="11" font-weight="800">D34 (Supercap V)</text>
+      <circle cx="4" cy="153" r="4.5" fill="#f59e0b"/>
 
-      <text x="14" y="192" fill="#f59e0b" font-size="11" font-weight="800">D35 (V_gen)</text>
-      <circle cx="4" cy="189" r="4.5" fill="#f59e0b"/>
+      <text x="14" y="192" fill="#94a3b8" font-size="10" font-weight="700">D35 (Unused)</text>
+      <circle cx="4" cy="189" r="4" fill="#475569"/>
 
-      <text x="14" y="228" fill="#f59e0b" font-size="11" font-weight="800">D32 (V_cap)</text>
-      <circle cx="4" cy="225" r="4.5" fill="#f59e0b"/>
+      <text x="14" y="228" fill="#38bdf8" font-size="11" font-weight="800">D32 (2-Piezo Trig)</text>
+      <circle cx="4" cy="225" r="4.5" fill="#38bdf8"/>
 
       <!-- Right Header Pins -->
       <text x="264" y="120" fill="#cbd5e1" font-size="10" font-weight="800" text-anchor="end">GND</text>

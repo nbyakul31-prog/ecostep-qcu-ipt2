@@ -43,7 +43,7 @@ class VoltageMeterCanvas(tk.Canvas):
         self.redraw()
 
     def update_reading(self, volts, adc_raw=0, pulse=False):
-        self.volts = max(0.0, min(15.0, float(volts)))
+        self.volts = max(0.0, min(6.0, float(volts)))
         self.adc_raw = max(0, min(1023, int(adc_raw)))
         if pulse:
             self.pulse_alpha = 5
@@ -63,22 +63,22 @@ class VoltageMeterCanvas(tk.Canvas):
         pad_border = pick(PALETTE["border"], self.mode)
 
         cx, cy, r = 150, 112, 86
-        # Colored zone guides under main arc
+        # Colored zone guides under main arc (0 - 6.0 V Supercapacitor scale)
         self.create_arc(
             cx - r, cy - r, cx + r, cy + r,
             start=0, extent=180, style="arc", width=15, outline=bg_track
         )
-        frac = min(1.0, self.volts / 15.0)
+        frac = min(1.0, self.volts / 6.0)
         if frac > 0.01:
-            col = PALETTE["amber"] if self.volts >= 9.0 else PALETTE["green_bright"]
+            col = PALETTE["amber"] if self.volts >= 4.2 else PALETTE["green_bright"]
             self.create_arc(
                 cx - r, cy - r, cx + r, cy + r,
                 start=180, extent=-(180 * frac), style="arc", width=15, outline=col
             )
 
-        # Tick marks (0, 3, 6, 9, 12, 15 V)
-        for v_mark in (0, 3, 6, 9, 12, 15):
-            ang = math.radians(180 - (v_mark / 15.0) * 180)
+        # Tick marks (0, 1, 2, 3, 4, 5, 6 V)
+        for v_mark in (0, 1, 2, 3, 4, 5, 6):
+            ang = math.radians(180 - (v_mark / 6.0) * 180)
             x1 = cx + (r - 11) * math.cos(ang)
             y1 = cy - (r - 11) * math.sin(ang)
             x2 = cx + (r + 3) * math.cos(ang)

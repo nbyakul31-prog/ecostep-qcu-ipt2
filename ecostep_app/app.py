@@ -276,8 +276,8 @@ class EcoStepApp(ctk.CTk):
         kpis.grid(row=0, column=0, sticky="ew", pady=(0, 12))
         kpis.grid_columnconfigure((0, 1, 2, 3), weight=1)
 
-        self.kpi_steps = self._make_kpi(kpis, 0, "FOOTSTEP ENGINE", "LIVE", "0", "Cadence: 0.0 steps/min", PALETTE["green_bright"])
-        self.kpi_volts = self._make_kpi(kpis, 1, "ADC VOLTAGE", "10-BIT", "0.00 V", "Raw sample: 0 / 1023", PALETTE["amber"])
+        self.kpi_steps = self._make_kpi(kpis, 0, "FOOTSTEP ENGINE", "D32", "0", "Cadence: 0.0 steps/min", PALETTE["green_bright"])
+        self.kpi_volts = self._make_kpi(kpis, 1, "SUPERCAP VOLTAGE", "D34 2X", "0.00 V", "Raw sample: 0 / 1023", PALETTE["amber"])
         self.kpi_joules = self._make_kpi(kpis, 2, "BATTERY & SoC", "BANK", "0.00 J", "SoC: 0.00% (0.0000 Wh)", PALETTE["teal"])
         self.kpi_db = self._make_kpi(kpis, 3, "PG18 LEDGER", "3NF", "0 logs", "PostgreSQL ecostep_qcu_db", PALETTE["green"])
 
@@ -478,6 +478,12 @@ class EcoStepApp(ctk.CTk):
                     self.connect_btn.configure(text="Connect Telemetry", fg_color=PALETTE["amber"])
             elif kind == "error":
                 self.serial_status_lbl.configure(text="● Port Error", text_color="#FCA5A5")
+            elif kind == "cap":
+                raw = evt["adc_raw"]
+                volts = evt["adc_voltage"]
+                self.kpi_volts[0].configure(text=f"{volts:.2f} V")
+                self.kpi_volts[1].configure(text=f"Raw sample: {raw} / 1023")
+                self.meter.update_reading(volts, adc_raw=raw, pulse=False)
             elif kind == "data":
                 self.step_counter = evt["step_number"]
                 raw = evt["adc_raw"]
@@ -514,9 +520,9 @@ class EcoStepApp(ctk.CTk):
             if self.wave_x:
                 self.wave_ax.plot(list(self.wave_x), list(self.wave_v), marker="o", color=PALETTE["green_bright"], linewidth=2)
                 self.wave_ax.fill_between(list(self.wave_x), list(self.wave_v), color=PALETTE["green_bright"], alpha=0.18)
-            self.wave_ax.set_title("Real-Time ADC Voltage Waveform (USB-C 115,200 Baud)", color=fg, fontsize=10)
-            self.wave_ax.set_ylabel("Volts (V)", color=fg, fontsize=9)
-            self.wave_ax.set_ylim(0, 15.5)
+            self.wave_ax.set_title("Supercapacitor Charge Curve (D34 • USB-C 115,200 Baud)", color=fg, fontsize=10)
+            self.wave_ax.set_ylabel("V_cap (V)", color=fg, fontsize=9)
+            self.wave_ax.set_ylim(0, 6.2)
         else:
             ts = self.db.get_timeseries(self.live_chart_mode.lower())
             x = list(range(len(ts["labels"])))
