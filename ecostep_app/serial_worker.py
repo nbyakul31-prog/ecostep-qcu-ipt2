@@ -157,12 +157,17 @@ class SerialTelemetryWorker:
             self._push({"kind": "raw", "raw_line": line})
 
     def send_command(self, cmd):
+        clean = cmd.strip()
+        if not clean:
+            return False
         with self._write_lock:
             if self._conn is not None and self.connected:
                 try:
-                    self._conn.write((cmd.strip() + "\n").encode("utf-8"))
+                    self._conn.write((clean + "\n").encode("utf-8"))
                     self._conn.flush()
+                    self._push({"kind": "tx", "command": clean})
                     return True
                 except Exception as exc:
                     self.last_error = str(exc)
+                    self._push({"kind": "error", "message": f"TX failed ({clean}): {exc}"})
         return False

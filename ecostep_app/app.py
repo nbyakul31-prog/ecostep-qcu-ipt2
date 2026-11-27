@@ -27,6 +27,7 @@ from .views import (
     ComponentsView,
     MeasurementRunsView,
     NeonKpiCard,
+    SerialDiagnosticsDrawer,
     SignTestsView,
     TimeAnalyticsView,
     VoltageMeterCanvas,
@@ -419,8 +420,20 @@ class EcoStepApp(ctk.CTk):
         ctl_row.pack(fill="x", padx=12, pady=(2, 10))
         mode_row = ctk.CTkFrame(ctl_row, fg_color="transparent")
         mode_row.pack(fill="x")
-        ctk.CTkButton(mode_row, text="▶ Bench Mode", width=134, height=30, corner_radius=8, fg_color=PALETTE["green"], hover_color=PALETTE["green_bright"], font=ctk.CTkFont(weight="bold"), command=lambda: self.worker.send_command("M0")).pack(side="left", expand=True, padx=(0, 4))
-        ctk.CTkButton(mode_row, text="Tile ADC", width=134, height=30, corner_radius=8, fg_color=PALETTE["amber"], hover_color="#D97706", text_color="#FFFFFF", font=ctk.CTkFont(weight="bold"), command=lambda: self.worker.send_command("M1")).pack(side="right", expand=True, padx=(4, 0))
+        self.bench_btn = ctk.CTkButton(
+            mode_row, text="▶ Bench Mode", width=134, height=30, corner_radius=8,
+            fg_color=PALETTE["green"], hover_color=PALETTE["green_bright"],
+            border_width=2, border_color="#86EFAC", font=ctk.CTkFont(weight="bold"),
+            command=lambda: self._set_hw_mode("M0"),
+        )
+        self.bench_btn.pack(side="left", expand=True, padx=(0, 4))
+        self.tile_btn = ctk.CTkButton(
+            mode_row, text="Tile ADC", width=134, height=30, corner_radius=8,
+            fg_color=PALETTE["card_soft"], hover_color="#D97706",
+            border_width=1, border_color=PALETTE["border"], text_color=PALETTE["amber"],
+            font=ctk.CTkFont(weight="bold"), command=lambda: self._set_hw_mode("M1"),
+        )
+        self.tile_btn.pack(side="right", expand=True, padx=(4, 0))
 
         wave_card = ctk.CTkFrame(mid, fg_color=PALETTE["card"], border_width=1, border_color=PALETTE["border"], corner_radius=14)
         wave_card.grid(row=0, column=1, sticky="nsew")
@@ -468,6 +481,9 @@ class EcoStepApp(ctk.CTk):
         sb.grid(row=1, column=1, sticky="ns", padx=(2, 10), pady=(4, 12))
         self.live_tree.configure(yscrollcommand=sb.set)
 
+        self.diag_drawer = SerialDiagnosticsDrawer(frame, on_send=self._send_diag_command, mode="Dark")
+        self.diag_drawer.grid(row=3, column=0, sticky="ew", pady=(10, 0))
+
         return frame
 
     def show_tab(self, name):
@@ -498,6 +514,7 @@ class EcoStepApp(ctk.CTk):
         for card in self.kpi_cards:
             card.set_mode(mode)
         self.meter.set_mode(mode)
+        self.diag_drawer.set_mode(mode)
         self._redraw_waveform()
         self.tabs["time"].refresh()
         self.tabs["runs"].refresh()
@@ -521,6 +538,23 @@ class EcoStepApp(ctk.CTk):
         self.live_chart_mode = val
         self._redraw_waveform()
 
+    def _set_hw_mode(self, cmd):
+        is_tile = cmd.upper() == "M1"
+        if is_tile:
+            self.bench_btn.configure(fg_color=PALETTE["card_soft"], border_width=1, border_color=PALETTE["border"], text_color=PALETTE["muted"])
+            self.tile_btn.configure(fg_color=PALETTE["amber"], border_width=2, border_color="#FDE68A", text_color="#FFFFFF")
+            self.diag_drawer.set_board_mode("TILE")
+        else:
+            self.bench_btn.configure(fg_color=PALETTE["green"], border_width=2, border_color="#86EFAC", text_color="#FFFFFF")
+            self.tile_btn.configure(fg_color=PALETTE["card_soft"], border_width=1, border_color=PALETTE["border"], text_color=PALETTE["amber"])
+            self.diag_drawer.set_board_mode("BENCH")
+        if not self.worker.send_command(cmd):
+            self.diag_drawer.log_event("info", "LOCAL", f"Switched UI mode preview -> {'TILE ADC (M1)' if is_tile else 'BENCH MODE (M0)'} (ESP32 offline)")
+
+    def _send_diag_command(self, cmd):
+        if not self.worker.send_command(cmd):
+            self.diag_drawer.log_event("err", "WARN", f"Cannot send '{cmd}': ESP32 is offline. Connect USB-C first.")
+
     def _on_quick_step(self):
         # Send live step trigger to ESP32 if connected; otherwise run offline visual bench preview
         if self.worker.send_command("S"):
@@ -528,12 +562,14 @@ class EcoStepApp(ctk.CTk):
         self.step_counter += 1
         self.demo_volts = round(min(5.60, self.demo_volts + 0.34) if self.demo_volts < 5.4 else 0.34, 2)
         adc_raw = int((self.demo_volts / 6.6) * 1023)
+        sub_txt = f"⚠ Near 6.6V D34 limit! ({adc_raw}/1023)" if self.demo_volts >= 5.5 else f"Demo preview: {adc_raw} / 1023"
         self.kpi_steps.set_values(val_text=str(self.step_counter))
-        self.kpi_volts.set_values(val_text=f"{self.demo_volts:.2f} V", sub_text=f"Demo preview: {adc_raw} / 1023")
+        self.kpi_volts.set_values(val_text=f"{self.demo_volts:.2f} V", sub_text=sub_txt)
         self.meter.update_reading(self.demo_volts, adc_raw=adc_raw, pulse=True)
         self.wave_x.append(self.step_counter)
         self.wave_v.append(self.demo_volts)
         self._redraw_waveform()
+        self.diag_drawer.log_event("raw", "DEMO", f"DATA,{self.step_counter},{adc_raw},{self.demo_volts:.2f} (offline bench preview)", count_rx=True)
 
     def _init_database_on_boot(self):
         ok, err = self.db.ensure_initialized()
@@ -602,27 +638,48 @@ class EcoStepApp(ctk.CTk):
                     self.serial_status_lbl.configure(text=f"● {evt['port']} LIVE", text_color="#4ADE80")
                     self.top_hw_pill.configure(text=f"● {evt['port']} LIVE", text_color=PALETTE["green_bright"])
                     self.connect_btn.configure(text="Disconnect", fg_color=PALETTE["danger"], text_color="#FFFFFF")
+                    self.diag_drawer.log_event("status", "CONN", f"Connected to {evt['port']} at 115,200 baud")
                 else:
                     self.serial_status_lbl.configure(text="● Disconnected", text_color=PALETTE["amber"])
                     self.top_hw_pill.configure(text="● ESP32 OFFLINE", text_color=PALETTE["green_bright"])
                     self.connect_btn.configure(text="Connect Telemetry", fg_color=PALETTE["green_bright"], text_color="#06140C")
+                    self.diag_drawer.log_event("info", "CONN", f"Disconnected from {evt['port']}")
             elif kind == "error":
                 self.serial_status_lbl.configure(text="● Port Error", text_color="#FCA5A5")
+                self.diag_drawer.log_event("err", "ERR", evt.get("message", "Unknown serial error"))
+            elif kind == "tx":
+                self.diag_drawer.log_event("tx", "TX", evt.get("command", ""), count_tx=True)
+            elif kind == "status":
+                bmode = evt.get("mode", "BENCH")
+                self.diag_drawer.set_board_mode(bmode)
+                self.diag_drawer.log_event("status", "STAT", evt.get("raw_line", bmode), count_rx=True)
+                if "TILE" in bmode.upper():
+                    self.bench_btn.configure(fg_color=PALETTE["card_soft"], border_width=1, border_color=PALETTE["border"], text_color=PALETTE["muted"])
+                    self.tile_btn.configure(fg_color=PALETTE["amber"], border_width=2, border_color="#FDE68A", text_color="#FFFFFF")
+                else:
+                    self.bench_btn.configure(fg_color=PALETTE["green"], border_width=2, border_color="#86EFAC", text_color="#FFFFFF")
+                    self.tile_btn.configure(fg_color=PALETTE["card_soft"], border_width=1, border_color=PALETTE["border"], text_color=PALETTE["amber"])
+            elif kind == "raw":
+                self.diag_drawer.log_event("raw", "RAW", evt.get("raw_line", ""), count_rx=True)
             elif kind == "cap":
                 raw = evt["adc_raw"]
                 volts = evt["adc_voltage"]
-                self.kpi_volts.set_values(val_text=f"{volts:.2f} V", sub_text=f"Raw sample: {raw} / 1023")
+                sub_txt = f"⚠ Near 6.6V D34 limit! ({raw}/1023)" if volts >= 5.5 else f"Raw sample: {raw} / 1023"
+                self.kpi_volts.set_values(val_text=f"{volts:.2f} V", sub_text=sub_txt)
                 self.meter.update_reading(volts, adc_raw=raw, pulse=False)
+                self.diag_drawer.log_event("rx_cap", "RX", evt.get("raw_line", f"CAP,{raw},{volts:.2f}"), count_rx=True)
             elif kind == "data":
                 self.step_counter = evt["step_number"]
                 raw = evt["adc_raw"]
                 volts = evt["adc_voltage"]
+                sub_txt = f"⚠ Near 6.6V D34 limit! ({raw}/1023)" if volts >= 5.5 else f"Raw sample: {raw} / 1023"
                 self.kpi_steps.set_values(val_text=str(self.step_counter))
-                self.kpi_volts.set_values(val_text=f"{volts:.2f} V", sub_text=f"Raw sample: {raw} / 1023")
+                self.kpi_volts.set_values(val_text=f"{volts:.2f} V", sub_text=sub_txt)
                 self.meter.update_reading(volts, adc_raw=raw, pulse=True)
                 self.wave_x.append(self.step_counter)
                 self.wave_v.append(volts)
                 self._redraw_waveform()
+                self.diag_drawer.log_event("rx_data", "RX", evt.get("raw_line", f"DATA,{self.step_counter},{raw},{volts:.2f}"), count_rx=True)
 
                 if self.db.connected and self.active_run_id:
                     self.db.insert_telemetry_log(self.active_run_id, self.step_counter, raw, volts)
@@ -636,6 +693,7 @@ class EcoStepApp(ctk.CTk):
 
     def _tick_meter_pulse(self):
         self.meter.tick_pulse()
+        self.diag_drawer.tick_age()
         self.after(180, self._tick_meter_pulse)
 
     def _redraw_waveform(self):

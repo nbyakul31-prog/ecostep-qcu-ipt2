@@ -358,6 +358,202 @@ def _ctk_icon(kind, size=15, color="#22C55E"):
     return ctk.CTkImage(light_image=pil_img, dark_image=pil_img, size=(size, size))
 
 
+class SerialDiagnosticsDrawer(ctk.CTkFrame):
+    """Collapsible USB-C serial inspector showing live TX/RX packets, ESP32 prints, and errors."""
+
+    def __init__(self, master, on_send=None, mode="Dark", **kwargs):
+        super().__init__(
+            master,
+            fg_color=PALETTE["card"],
+            border_width=1,
+            border_color=PALETTE["border"],
+            corner_radius=12,
+            **kwargs,
+        )
+        self.on_send = on_send
+        self.mode = mode
+        self.is_open = False
+        self.rx_count = 0
+        self.tx_count = 0
+        self.last_rx_ts = None
+        self.board_mode = "BENCH"
+
+        self.grid_columnconfigure(0, weight=1)
+        self._build_ui()
+        self.set_mode(mode)
+        self.log_event("info", "INFO", "Diagnostics ready. Connect ESP32 or click Quick Step for offline preview.")
+
+    def _build_ui(self):
+        bar = ctk.CTkFrame(self, fg_color="transparent")
+        bar.grid(row=0, column=0, sticky="ew", padx=10, pady=5)
+
+        self.toggle_btn = ctk.CTkButton(
+            bar, text="▸ Serial Diagnostics", width=155, height=26, corner_radius=8,
+            fg_color=PALETTE["card_soft"], hover_color=PALETTE["sidebar_hover"],
+            border_width=1, border_color=PALETTE["border"], text_color=PALETTE["text"],
+            font=ctk.CTkFont(size=11, weight="bold"), command=self.toggle,
+        )
+        self.toggle_btn.pack(side="left")
+
+        self.mode_pill = ctk.CTkLabel(
+            bar, text="MODE: BENCH", font=ctk.CTkFont(family="Consolas", size=10, weight="bold"),
+            fg_color=PALETTE["card_soft"], text_color=PALETTE["amber"], corner_radius=8, padx=8, pady=2,
+        )
+        self.mode_pill.pack(side="left", padx=(8, 4))
+
+        self.cnt_pill = ctk.CTkLabel(
+            bar, text="RX: 0  |  TX: 0", font=ctk.CTkFont(family="Consolas", size=10),
+            text_color=PALETTE["muted"], padx=6,
+        )
+        self.cnt_pill.pack(side="left", padx=4)
+
+        self.age_pill = ctk.CTkLabel(
+            bar, text="Last: --", font=ctk.CTkFont(family="Consolas", size=10),
+            text_color=PALETTE["muted"], padx=6,
+        )
+        self.age_pill.pack(side="left", padx=4)
+
+        ctk.CTkButton(
+            bar, text="Clear", width=56, height=24, corner_radius=7,
+            fg_color="transparent", hover_color=PALETTE["sidebar_hover"],
+            border_width=1, border_color=PALETTE["border"], text_color=PALETTE["muted"],
+            font=ctk.CTkFont(size=10, weight="bold"), command=self.clear_log,
+        ).pack(side="right", padx=(4, 0))
+
+        ctk.CTkButton(
+            bar, text="Ping (?)", width=68, height=24, corner_radius=7,
+            fg_color=PALETTE["card_soft"], hover_color=PALETTE["sidebar_hover"],
+            border_width=1, border_color=PALETTE["border"], text_color=PALETTE["green_bright"],
+            font=ctk.CTkFont(size=10, weight="bold"), command=lambda: self._dispatch("?"),
+        ).pack(side="right", padx=4)
+
+        self.body = ctk.CTkFrame(self, fg_color="transparent")
+        self.body.grid_columnconfigure(0, weight=1)
+
+        term_wrap = ctk.CTkFrame(self.body, fg_color="transparent")
+        term_wrap.grid(row=0, column=0, sticky="ew", padx=10, pady=(2, 6))
+        term_wrap.grid_columnconfigure(0, weight=1)
+
+        self.console = tk.Text(
+            term_wrap, height=6, wrap="word", relief="flat", borderwidth=0,
+            highlightthickness=1, font=("Consolas", 9), state="disabled",
+        )
+        self.console.grid(row=0, column=0, sticky="ew")
+        sb = ctk.CTkScrollbar(term_wrap, command=self.console.yview, height=96)
+        sb.grid(row=0, column=1, sticky="ns", padx=(4, 0))
+        self.console.configure(yscrollcommand=sb.set)
+
+        ctl = ctk.CTkFrame(self.body, fg_color="transparent")
+        ctl.grid(row=1, column=0, sticky="ew", padx=10, pady=(0, 8))
+        self.cmd_entry = styled_entry(ctl, "Send ESP32 command (e.g. ?, S, M0, M1, R, L0, L1)...")
+        self.cmd_entry.pack(side="left", fill="x", expand=True, padx=(0, 6))
+        self.cmd_entry.bind("<Return>", lambda _e: self._send_from_entry())
+        ctk.CTkButton(
+            ctl, text="Send", width=68, height=28, corner_radius=8,
+            fg_color=PALETTE["green"], hover_color=PALETTE["green_bright"],
+            font=ctk.CTkFont(size=11, weight="bold"), command=self._send_from_entry,
+        ).pack(side="left", padx=(0, 6))
+        ctk.CTkButton(
+            ctl, text="Copy Log", width=78, height=28, corner_radius=8,
+            fg_color=PALETTE["card_soft"], hover_color=PALETTE["sidebar_hover"],
+            border_width=1, border_color=PALETTE["border"], text_color=PALETTE["text"],
+            font=ctk.CTkFont(size=11), command=self.copy_log,
+        ).pack(side="left")
+
+    def toggle(self):
+        self.set_open(not self.is_open)
+
+    def set_open(self, flag):
+        self.is_open = bool(flag)
+        if self.is_open:
+            self.body.grid(row=1, column=0, sticky="ew")
+            self.toggle_btn.configure(text="▾ Serial Diagnostics")
+        else:
+            self.body.grid_forget()
+            self.toggle_btn.configure(text="▸ Serial Diagnostics")
+
+    def set_mode(self, mode):
+        self.mode = mode
+        bg = "#07120C" if mode == "Dark" else "#F4F8F1"
+        fg = "#D7F3DF" if mode == "Dark" else "#17261B"
+        bd = "#1B3F2B" if mode == "Dark" else "#C8DAC0"
+        self.console.configure(bg=bg, fg=fg, highlightbackground=bd, highlightcolor=bd, insertbackground=fg)
+        self.console.tag_configure("ts", foreground="#689176" if mode == "Dark" else "#64748B")
+        self.console.tag_configure("tx", foreground="#FBBF24" if mode == "Dark" else "#B45309")
+        self.console.tag_configure("rx_data", foreground="#34D399" if mode == "Dark" else "#15803D")
+        self.console.tag_configure("rx_cap", foreground="#38BDF8" if mode == "Dark" else "#0369A1")
+        self.console.tag_configure("status", foreground="#C084FC" if mode == "Dark" else "#7E22CE")
+        self.console.tag_configure("err", foreground="#F87171" if mode == "Dark" else "#B91C1C")
+        self.console.tag_configure("raw", foreground="#A7D7B8" if mode == "Dark" else "#334155")
+        self.console.tag_configure("info", foreground="#84A98E" if mode == "Dark" else "#475569")
+
+    def set_board_mode(self, board_mode):
+        clean = (board_mode or "BENCH").upper()
+        self.board_mode = clean
+        col = PALETTE["green_bright"] if "TILE" in clean or "M1" in clean else PALETTE["amber"]
+        self.mode_pill.configure(text=f"MODE: {clean}", text_color=col)
+
+    def _dispatch(self, cmd):
+        if self.on_send:
+            self.on_send(cmd)
+
+    def _send_from_entry(self):
+        cmd = self.cmd_entry.get().strip()
+        if not cmd:
+            return
+        self.cmd_entry.delete(0, "end")
+        self._dispatch(cmd)
+
+    def log_event(self, tag, prefix, text, count_rx=False, count_tx=False):
+        import time as _t
+
+        ts = _t.strftime("%H:%M:%S")
+        if count_rx:
+            self.rx_count += 1
+            self.last_rx_ts = _t.monotonic()
+        if count_tx:
+            self.tx_count += 1
+        if count_rx or count_tx:
+            self.cnt_pill.configure(text=f"RX: {self.rx_count}  |  TX: {self.tx_count}")
+            self.tick_age()
+
+        self.console.configure(state="normal")
+        self.console.insert("end", f"[{ts}] ", "ts")
+        self.console.insert("end", f"[{prefix}] ", tag)
+        self.console.insert("end", f"{text}\n", tag)
+        line_count = int(self.console.index("end-1c").split(".")[0])
+        if line_count > 240:
+            self.console.delete("1.0", f"{line_count - 200}.0")
+        self.console.see("end")
+        self.console.configure(state="disabled")
+
+    def tick_age(self):
+        import time as _t
+
+        if self.last_rx_ts is None:
+            self.age_pill.configure(text="Last: --", text_color=PALETTE["muted"])
+            return
+        age = _t.monotonic() - self.last_rx_ts
+        col = PALETTE["green_bright"] if age < 3.5 else (PALETTE["amber"] if age < 10.0 else PALETTE["muted"])
+        self.age_pill.configure(text=f"Last: {age:.1f}s ago", text_color=col)
+
+    def clear_log(self):
+        self.rx_count = 0
+        self.tx_count = 0
+        self.last_rx_ts = None
+        self.cnt_pill.configure(text="RX: 0  |  TX: 0")
+        self.age_pill.configure(text="Last: --", text_color=PALETTE["muted"])
+        self.console.configure(state="normal")
+        self.console.delete("1.0", "end")
+        self.console.configure(state="disabled")
+
+    def copy_log(self):
+        txt = self.console.get("1.0", "end").strip()
+        if txt:
+            self.clipboard_clear()
+            self.clipboard_append(txt)
+
+
 class MeasurementRunsView(ctk.CTkFrame):
     """CRUD + soft-delete + mWh->Joules analytics view for measurement_runs."""
 
@@ -576,10 +772,17 @@ class MeasurementRunsView(ctk.CTkFrame):
         self._update_preview()
 
     def refresh(self):
-        if not self.app.db.connected:
-            return
         mode = ctk.get_appearance_mode()
         configure_tree_zebra(self.tree, mode)
+        fg = pick(PALETTE["text"], mode)
+        if not self.app.db.connected:
+            self.ax.clear()
+            apply_matplotlib_theme(self.fig, self.ax, mode)
+            self.ax.set_ylim(-0.05, 0.05)
+            self.ax.set_ylabel("Joules (J)", color=fg, fontsize=8)
+            self.fig.tight_layout()
+            self.canvas.draw_idle()
+            return
 
         comps = self.app.db.list_components()
         comp_opts = [f"{c['component_id']}: {c['component_name'][:28]}" for c in comps]
@@ -1172,6 +1375,13 @@ class TimeAnalyticsView(ctk.CTkFrame):
         mode = ctk.get_appearance_mode()
         self.batt_ring.set_mode(mode)
         if not self.app.db.connected:
+            fg = pick(PALETTE["text"], mode)
+            self.ax.clear()
+            self.ax2.clear()
+            apply_matplotlib_theme(self.fig, self.ax, mode, ax2=self.ax2)
+            self.ax.set_title(f"Power & Footstep Generation ({self.current_window.upper()})", color=fg, fontsize=10)
+            self.fig.tight_layout()
+            self.canvas.draw_idle()
             return
 
         periods = self.app.db.get_period_counters()
