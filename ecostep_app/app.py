@@ -3,10 +3,12 @@
 from collections import deque
 import os
 import queue
+import tkinter as tk
 from tkinter import ttk
 import customtkinter as ctk
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
+from PIL import ImageTk
 
 from . import analytics, config
 from .db import EcoStepDatabase
@@ -16,11 +18,15 @@ from .theme import (
     apply_matplotlib_theme,
     ensure_ico_file,
     make_circular_logo,
+    make_icon,
     pick,
+    render_aurora_banner,
+    render_sidebar_aurora,
 )
 from .views import (
     ComponentsView,
     MeasurementRunsView,
+    NeonKpiCard,
     SignTestsView,
     TimeAnalyticsView,
     VoltageMeterCanvas,
@@ -99,11 +105,11 @@ class PostgresSetupDialog(ctk.CTkToplevel):
 class EcoStepApp(ctk.CTk):
     def __init__(self):
         super().__init__()
-        ctk.set_appearance_mode("Light")
+        ctk.set_appearance_mode("Dark")
         ctk.set_default_color_theme("green")
 
         self.title("ECOSTEP QCU — Footstep Energy Telemetry & Monitoring System (IPT2)")
-        self.geometry("1320x830")
+        self.geometry("1340x840")
         self.minsize(1140, 720)
         self.configure(fg_color=PALETTE["bg"])
 
@@ -122,21 +128,47 @@ class EcoStepApp(ctk.CTk):
         self.wave_x = deque(maxlen=40)
         self.wave_v = deque(maxlen=40)
         self.step_counter = 0
+        self.demo_volts = 0.0
         self.live_chart_mode = "LIVE"
 
+        self._banner_photo = None
+        self._banner_leaf = None
+        self._banner_size = (0, 0, None)
+        self._sb_wave_photo = None
+        self._icons = {}
+
+        self._build_icons()
         self._build_layout()
         self._init_database_on_boot()
         self.after(80, self._poll_serial_queue)
         self.after(180, self._tick_meter_pulse)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
+    def _build_icons(self):
+        specs = {
+            "live": ("live", 16, "#E8F5E4"),
+            "time": ("time", 16, "#E8F5E4"),
+            "runs": ("runs", 16, "#E8F5E4"),
+            "signs": ("bolt", 16, "#E8F5E4"),
+            "components": ("cube", 16, "#E8F5E4"),
+            "usb": ("usb", 15, "#07150D"),
+            "db": ("db", 15, "#CBE7D2"),
+            "bolt_btn": ("bolt", 14, "#FFFFFF"),
+            "meter": ("leaf", 15, "#22C55E"),
+            "graph": ("runs", 15, "#22C55E"),
+            "stream": ("db", 15, "#22C55E"),
+        }
+        for key, (kind, sz, col) in specs.items():
+            pil_ic = make_icon(kind, size=sz, color=col)
+            self._icons[key] = ctk.CTkImage(light_image=pil_ic, dark_image=pil_ic, size=(sz, sz))
+
     def _build_layout(self):
         self.grid_columnconfigure(0, weight=0)
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
 
-        # ---------------- FOREST GREEN ECO SIDEBAR ----------------
-        self.sidebar = ctk.CTkFrame(self, width=264, fg_color=PALETTE["sidebar_bg"], corner_radius=0)
+        # ---------------- NEON EMERALD SIDEBAR ----------------
+        self.sidebar = ctk.CTkFrame(self, width=264, fg_color=PALETTE["sidebar_bg"], corner_radius=0, border_width=1, border_color="#142C1E")
         self.sidebar.grid(row=0, column=0, sticky="nsew")
         self.sidebar.grid_propagate(False)
 
@@ -150,10 +182,10 @@ class EcoStepApp(ctk.CTk):
         tbox.pack(side="left", fill="x")
         ctk.CTkLabel(tbox, text="ECOSTEP QCU", font=ctk.CTkFont(size=18, weight="bold"), text_color="#FFFFFF").pack(anchor="w")
         ctk.CTkLabel(tbox, text="Recycled Kinetic Mat", font=ctk.CTkFont(size=11, weight="bold"), text_color=PALETTE["gold"]).pack(anchor="w")
-        ctk.CTkLabel(tbox, text="IPT2 Telemetry Suite", font=ctk.CTkFont(size=10), text_color="#A7C99E").pack(anchor="w")
+        ctk.CTkLabel(tbox, text="IPT2 Telemetry Suite", font=ctk.CTkFont(size=10), text_color="#94BD9A").pack(anchor="w")
 
-        ctk.CTkFrame(self.sidebar, height=1, fg_color="#25482B").pack(fill="x", padx=16, pady=(4, 10))
-        ctk.CTkLabel(self.sidebar, text="NAVIGATION", font=ctk.CTkFont(size=10, weight="bold"), text_color="#7FA878").pack(anchor="w", padx=18, pady=(0, 4))
+        ctk.CTkFrame(self.sidebar, height=1, fg_color="#1A3826").pack(fill="x", padx=16, pady=(4, 10))
+        ctk.CTkLabel(self.sidebar, text="NAVIGATION", font=ctk.CTkFont(size=10, weight="bold"), text_color="#7AA384").pack(anchor="w", padx=18, pady=(0, 4))
 
         self.nav_btns = {}
         nav_items = [
@@ -167,9 +199,13 @@ class EcoStepApp(ctk.CTk):
             b = ctk.CTkButton(
                 self.sidebar,
                 text=f"  {label}",
+                image=self._icons[key],
+                compound="left",
                 anchor="w",
                 height=38,
                 corner_radius=10,
+                border_width=0,
+                border_color="#4ADE80",
                 fg_color="transparent",
                 hover_color=PALETTE["sidebar_hover"],
                 text_color="#E8F5E4",
@@ -180,77 +216,107 @@ class EcoStepApp(ctk.CTk):
             self.nav_btns[key] = b
 
         # USB-C Serial Box
-        ser_box = ctk.CTkFrame(self.sidebar, fg_color=PALETTE["sidebar_card"], corner_radius=12, border_width=1, border_color="#25482B")
-        ser_box.pack(fill="x", padx=14, pady=(16, 8))
-        ctk.CTkLabel(ser_box, text="USB-C SERIAL (115,200)", font=ctk.CTkFont(size=10, weight="bold"), text_color="#9EC496").pack(anchor="w", padx=12, pady=(10, 4))
+        ser_box = ctk.CTkFrame(self.sidebar, fg_color=PALETTE["sidebar_card"], corner_radius=12, border_width=1, border_color="#1C3A28")
+        ser_box.pack(fill="x", padx=14, pady=(14, 8))
+        ctk.CTkLabel(ser_box, text="USB-C SERIAL (115,200)", font=ctk.CTkFont(size=10, weight="bold"), text_color="#8CB999").pack(anchor="w", padx=12, pady=(10, 4))
 
         self.port_var = ctk.StringVar(value=config.DEFAULT_SERIAL_PORT)
         self.port_menu = styled_option(ser_box, self.port_var, list_serial_ports())
+        self.port_menu.configure(fg_color="#12271B", button_color="#1C3D2A", button_hover_color=PALETTE["green"], text_color="#EBF7EE")
         self.port_menu.pack(fill="x", padx=12, pady=4)
 
-        self.connect_btn = ctk.CTkButton(ser_box, text="Connect Telemetry", fg_color=PALETTE["amber"], hover_color="#D97008", text_color="#FFFFFF", font=ctk.CTkFont(weight="bold"), command=self._toggle_serial)
+        self.connect_btn = ctk.CTkButton(
+            ser_box, text="Connect Telemetry", image=self._icons["usb"], compound="left",
+            fg_color=PALETTE["green_bright"], hover_color="#16A34A", text_color="#06140C",
+            font=ctk.CTkFont(weight="bold"), command=self._toggle_serial
+        )
         self.connect_btn.pack(fill="x", padx=12, pady=(4, 6))
 
-        self.serial_status_lbl = ctk.CTkLabel(ser_box, text="● Disconnected", font=ctk.CTkFont(size=11, weight="bold"), text_color="#FCD34D")
+        self.serial_status_lbl = ctk.CTkLabel(ser_box, text="● Disconnected", font=ctk.CTkFont(size=11, weight="bold"), text_color=PALETTE["amber"])
         self.serial_status_lbl.pack(anchor="w", padx=12, pady=(0, 10))
 
         # PostgreSQL Status Box
-        db_box = ctk.CTkFrame(self.sidebar, fg_color=PALETTE["sidebar_card"], corner_radius=12, border_width=1, border_color="#25482B")
+        db_box = ctk.CTkFrame(self.sidebar, fg_color=PALETTE["sidebar_card"], corner_radius=12, border_width=1, border_color="#1C3A28")
         db_box.pack(fill="x", padx=14, pady=6)
-        ctk.CTkLabel(db_box, text="POSTGRESQL 18 (3NF)", font=ctk.CTkFont(size=10, weight="bold"), text_color="#9EC496").pack(anchor="w", padx=12, pady=(10, 2))
+        ctk.CTkLabel(db_box, text="POSTGRESQL DB (3NF)", font=ctk.CTkFont(size=10, weight="bold"), text_color="#8CB999").pack(anchor="w", padx=12, pady=(10, 2))
         self.db_status_lbl = ctk.CTkLabel(db_box, text="● Checking...", font=ctk.CTkFont(size=11, weight="bold"), text_color="#E8F5E4")
         self.db_status_lbl.pack(anchor="w", padx=12, pady=(0, 6))
-        ctk.CTkButton(db_box, text="DB Connection Setup", height=28, fg_color=PALETTE["sidebar_hover"], command=self.open_pg_dialog).pack(fill="x", padx=12, pady=(0, 10))
+        ctk.CTkButton(
+            db_box, text="DB Connection Setup", image=self._icons["db"], compound="left",
+            height=29, fg_color="#152E20", hover_color="#1F422E", border_width=1, border_color="#244E36",
+            command=self.open_pg_dialog
+        ).pack(fill="x", padx=12, pady=(0, 10))
 
         self.active_run_lbl = ctk.CTkLabel(self.sidebar, text="Active Run: None", font=ctk.CTkFont(size=11, weight="bold"), text_color=PALETTE["gold"])
-        self.active_run_lbl.pack(anchor="w", padx=18, pady=(8, 4))
+        self.active_run_lbl.pack(anchor="w", padx=18, pady=(6, 4))
 
-        bottom = ctk.CTkFrame(self.sidebar, fg_color="transparent")
-        bottom.pack(side="bottom", fill="x", padx=16, pady=14)
-        self.theme_switch = ctk.CTkSwitch(bottom, text="Dark Eco Mode", text_color="#E8F5E4", progress_color=PALETTE["amber"], command=self._toggle_theme)
-        self.theme_switch.pack(anchor="w")
+        # Subtle aurora wave footer inside sidebar
+        self.sb_footer = tk.Canvas(self.sidebar, height=64, highlightthickness=0, bd=0, bg=pick(PALETTE["sidebar_bg"], "Dark"))
+        self.sb_footer.pack(side="bottom", fill="x")
+        self.sb_footer.bind("<Configure>", self._draw_sidebar_footer)
 
-        # ---------------- MAIN WORKSPACE (TOP APP BAR + CONTENT) ----------------
+        self.theme_switch = ctk.CTkSwitch(
+            self.sb_footer, text="Dark Eco Mode", text_color="#E8F5E4",
+            fg_color="#1D3B2A", progress_color=PALETTE["green_bright"], button_color="#FFFFFF",
+            bg_color=pick(PALETTE["sidebar_bg"], "Dark"),
+            command=self._toggle_theme
+        )
+        self.theme_switch.select()
+        self.sb_switch_win = self.sb_footer.create_window(18, 32, anchor="w", window=self.theme_switch)
+
+        # ---------------- MAIN WORKSPACE (AURORA TOP BANNER + CONTENT) ----------------
         right_shell = ctk.CTkFrame(self, fg_color="transparent")
-        right_shell.grid(row=0, column=1, sticky="nsew", padx=18, pady=14)
+        right_shell.grid(row=0, column=1, sticky="nsew", padx=16, pady=12)
         right_shell.grid_columnconfigure(0, weight=1)
         right_shell.grid_rowconfigure(1, weight=1)
 
-        topbar = ctk.CTkFrame(right_shell, fg_color=PALETTE["card"], border_width=1, border_color=PALETTE["border"], corner_radius=14)
-        topbar.grid(row=0, column=0, sticky="ew", pady=(0, 12))
-        tleft = ctk.CTkFrame(topbar, fg_color="transparent")
-        tleft.pack(side="left", padx=16, pady=10)
-        self.page_title_lbl = ctk.CTkLabel(tleft, text="Live Telemetry Monitor", font=ctk.CTkFont(size=18, weight="bold"), text_color=PALETTE["text"])
-        self.page_title_lbl.pack(anchor="w")
-        self.page_sub_lbl = ctk.CTkLabel(tleft, text="Recycled Kinetic Mat • Real-Time USB-C Stream & PostgreSQL 3NF Ledger", font=ctk.CTkFont(size=11), text_color=PALETTE["muted"])
-        self.page_sub_lbl.pack(anchor="w")
+        self.topbar_canvas = tk.Canvas(right_shell, height=74, highlightthickness=0, bd=0, bg=pick(PALETTE["bg"], "Dark"))
+        self.topbar_canvas.grid(row=0, column=0, sticky="ew", pady=(0, 12))
+        self.topbar_canvas.bind("<Configure>", self._on_topbar_resize)
 
-        tright = ctk.CTkFrame(topbar, fg_color="transparent")
-        tright.pack(side="right", padx=14, pady=10)
-        self.top_mode_seg = ctk.CTkSegmentedButton(
-            tright,
-            values=["Eco Light", "Forest Dark"],
-            command=self._on_top_theme_seg,
-            selected_color=PALETTE["green"],
-            unselected_color=PALETTE["card_soft"],
-            text_color=PALETTE["text"],
-        )
-        self.top_mode_seg.set("Eco Light")
-        self.top_mode_seg.pack(side="right", padx=(10, 0))
+        self.page_title_str = "Live Telemetry Monitor"
+        self.page_sub_str = "Recycled Kinetic Mat • Real-Time USB-C Stream & 4x4 PZT Pulse Gauge"
 
-        ctk.CTkButton(tright, text="⚡ Quick Step", width=112, fg_color=PALETTE["amber"], hover_color="#D97008", text_color="#FFFFFF", font=ctk.CTkFont(weight="bold"), command=lambda: self.worker.send_command("S")).pack(side="right", padx=(10, 0))
-
+        # Docked right controls (color-matched seamlessly with right edge of aurora banner)
+        top_card_bg = pick(PALETTE["card"], "Dark")
+        self.tright = ctk.CTkFrame(self.topbar_canvas, fg_color=top_card_bg, bg_color=top_card_bg, corner_radius=0)
         self.top_hw_pill = ctk.CTkLabel(
-            tright,
+            self.tright,
             text="● ESP32 OFFLINE",
             font=ctk.CTkFont(size=11, weight="bold"),
             fg_color=PALETTE["card_soft"],
-            text_color=PALETTE["muted"],
+            bg_color=top_card_bg,
+            text_color=PALETTE["green_bright"],
             corner_radius=14,
             padx=12,
             pady=5,
         )
-        self.top_hw_pill.pack(side="right")
+        self.top_hw_pill.pack(side="left", padx=(4, 8), pady=4)
+
+        self.quick_step_btn = ctk.CTkButton(
+            self.tright, text="Quick Step", image=self._icons["bolt_btn"], compound="left",
+            width=114, height=32, corner_radius=14,
+            fg_color=PALETTE["amber"], hover_color="#D97706", bg_color=top_card_bg, text_color="#FFFFFF",
+            font=ctk.CTkFont(size=12, weight="bold"), command=self._on_quick_step
+        )
+        self.quick_step_btn.pack(side="left", padx=(0, 8), pady=4)
+
+        self.top_mode_seg = ctk.CTkSegmentedButton(
+            self.tright,
+            values=["Eco Light", "Forest Dark"],
+            command=self._on_top_theme_seg,
+            fg_color=PALETTE["card_soft"],
+            selected_color=PALETTE["green"],
+            selected_hover_color=PALETTE["green_bright"],
+            unselected_color=PALETTE["card_soft"],
+            unselected_hover_color=PALETTE["sidebar_hover"],
+            bg_color=top_card_bg,
+            text_color=PALETTE["text"],
+            corner_radius=14,
+        )
+        self.top_mode_seg.set("Forest Dark")
+        self.top_mode_seg.pack(side="left", padx=(0, 2), pady=4)
+        self.topbar_controls_win = self.topbar_canvas.create_window(10, 37, anchor="e", window=self.tright)
 
         self.content = ctk.CTkFrame(right_shell, fg_color="transparent")
         self.content.grid(row=1, column=0, sticky="nsew")
@@ -264,8 +330,53 @@ class EcoStepApp(ctk.CTk):
             "signs": SignTestsView(self.content, self),
             "components": ComponentsView(self.content, self),
         }
-        style_treeview("Light")
+        style_treeview("Dark")
         self.show_tab("live")
+
+    def _draw_sidebar_footer(self, event=None):
+        mode = ctk.get_appearance_mode()
+        w = self.sb_footer.winfo_width() or 264
+        h = self.sb_footer.winfo_height() or 64
+        sb_bg = pick(PALETTE["sidebar_bg"], mode)
+        self.sb_footer.configure(bg=sb_bg)
+        self.theme_switch.configure(bg_color=sb_bg)
+        img = render_sidebar_aurora(w, h, mode)
+        self._sb_wave_photo = ImageTk.PhotoImage(img)
+        self.sb_footer.delete("sb_art")
+        self.sb_footer.create_image(0, 0, anchor="nw", image=self._sb_wave_photo, tags="sb_art")
+        self.sb_footer.tag_raise(self.sb_switch_win)
+
+    def _on_topbar_resize(self, event):
+        if event.width > 120 and event.height > 30:
+            self._redraw_topbar(event.width, event.height)
+
+    def _redraw_topbar(self, w=None, h=None):
+        mode = ctk.get_appearance_mode()
+        w = w or self.topbar_canvas.winfo_width() or 1020
+        h = h or self.topbar_canvas.winfo_height() or 74
+        card_col = pick(PALETTE["card"], mode)
+        self.topbar_canvas.configure(bg=pick(PALETTE["bg"], mode))
+        self.tright.configure(fg_color=card_col, bg_color=card_col)
+        self.top_hw_pill.configure(bg_color=card_col)
+        self.quick_step_btn.configure(bg_color=card_col)
+        self.top_mode_seg.configure(bg_color=card_col)
+        self.topbar_canvas.delete("bg_art")
+
+        img = render_aurora_banner(w, h, mode)
+        self._banner_photo = ImageTk.PhotoImage(img)
+        self.topbar_canvas.create_image(0, 0, anchor="nw", image=self._banner_photo, tags="bg_art")
+
+        leaf = make_icon("leaf", size=28, color="#22C55E" if mode == "Dark" else "#15803D")
+        self._banner_leaf = ImageTk.PhotoImage(leaf)
+        self.topbar_canvas.create_image(20, h // 2, anchor="w", image=self._banner_leaf, tags="bg_art")
+
+        title_col = "#FFFFFF" if mode == "Dark" else "#122618"
+        sub_col = "#A7D7B8" if mode == "Dark" else "#4C6A52"
+        self.topbar_canvas.create_text(58, h // 2 - 11, anchor="w", text=self.page_title_str, font=("Segoe UI", 15, "bold"), fill=title_col, tags="bg_art")
+        self.topbar_canvas.create_text(58, h // 2 + 12, anchor="w", text=self.page_sub_str, font=("Segoe UI", 9), fill=sub_col, tags="bg_art")
+
+        self.topbar_canvas.coords(self.topbar_controls_win, w - 12, h // 2)
+        self.topbar_canvas.tag_raise(self.topbar_controls_win)
 
     def _build_live_tab(self):
         frame = ctk.CTkFrame(self.content, fg_color="transparent")
@@ -276,10 +387,19 @@ class EcoStepApp(ctk.CTk):
         kpis.grid(row=0, column=0, sticky="ew", pady=(0, 12))
         kpis.grid_columnconfigure((0, 1, 2, 3), weight=1)
 
-        self.kpi_steps = self._make_kpi(kpis, 0, "FOOTSTEP ENGINE", "D32", "0", "Cadence: 0.0 steps/min", PALETTE["green_bright"])
-        self.kpi_volts = self._make_kpi(kpis, 1, "SUPERCAP VOLTAGE", "D34 2X", "0.00 V", "Raw sample: 0 / 1023", PALETTE["amber"])
-        self.kpi_joules = self._make_kpi(kpis, 2, "BATTERY & SoC", "BANK", "0.00 J", "SoC: 0.00% (0.0000 Wh)", PALETTE["teal"])
-        self.kpi_db = self._make_kpi(kpis, 3, "PG18 LEDGER", "3NF", "0 logs", "PostgreSQL ecostep_qcu_db", PALETTE["green"])
+        self.kpi_steps = NeonKpiCard(kpis, "FOOTSTEP ENGINE", "D32", "0", "Cadence: 0.0 steps/min", PALETTE["green_bright"], "foot", mode="Dark")
+        self.kpi_steps.grid(row=0, column=0, sticky="ew", padx=(0, 6))
+
+        self.kpi_volts = NeonKpiCard(kpis, "SUPERCAP VOLTAGE", "D34 2X", "0.00 V", "Raw sample: 0 / 1023", PALETTE["amber"], "cap", mode="Dark")
+        self.kpi_volts.grid(row=0, column=1, sticky="ew", padx=6)
+
+        self.kpi_joules = NeonKpiCard(kpis, "BATTERY & SoC", "BANK", "0.00 J", "SoC: 0.00% (0.0000 Wh)", PALETTE["teal"], "battery", mode="Dark")
+        self.kpi_joules.grid(row=0, column=2, sticky="ew", padx=6)
+
+        self.kpi_db = NeonKpiCard(kpis, "PG18 LEDGER", "3NF", "0 logs", "PostgreSQL ecostep_qcu_db", PALETTE["purple"], "ledger", mode="Dark")
+        self.kpi_db.grid(row=0, column=3, sticky="ew", padx=(6, 0))
+
+        self.kpi_cards = (self.kpi_steps, self.kpi_volts, self.kpi_joules, self.kpi_db)
 
         mid = ctk.CTkFrame(frame, fg_color="transparent")
         mid.grid(row=1, column=0, sticky="ew", pady=(0, 12))
@@ -288,29 +408,36 @@ class EcoStepApp(ctk.CTk):
 
         meter_card = ctk.CTkFrame(mid, fg_color=PALETTE["card"], border_width=1, border_color=PALETTE["border"], corner_radius=14)
         meter_card.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
-        ctk.CTkLabel(meter_card, text="Kinetic Eco-Mat & Voltmeter", font=ctk.CTkFont(size=14, weight="bold"), text_color=PALETTE["text"]).pack(pady=(10, 2))
-        self.meter = VoltageMeterCanvas(meter_card, mode="Light", on_tile_click=lambda: self.worker.send_command("S"))
+        m_head = ctk.CTkFrame(meter_card, fg_color="transparent")
+        m_head.pack(fill="x", padx=14, pady=(10, 0))
+        ctk.CTkLabel(m_head, text="  Kinetic Eco-Mat & Voltmeter", image=self._icons["meter"], compound="left", font=ctk.CTkFont(size=13, weight="bold"), text_color=PALETTE["text"]).pack(side="left")
+
+        self.meter = VoltageMeterCanvas(meter_card, mode="Dark", on_tile_click=self._on_quick_step)
         self.meter.pack(padx=10, pady=2)
 
         ctl_row = ctk.CTkFrame(meter_card, fg_color="transparent")
         ctl_row.pack(fill="x", padx=12, pady=(2, 10))
         mode_row = ctk.CTkFrame(ctl_row, fg_color="transparent")
         mode_row.pack(fill="x")
-        ctk.CTkButton(mode_row, text="Bench Mode", width=130, height=28, fg_color=PALETTE["green"], command=lambda: self.worker.send_command("M0")).pack(side="left", expand=True, padx=(0, 4))
-        ctk.CTkButton(mode_row, text="Tile ADC", width=130, height=28, fg_color=PALETTE["amber"], text_color="#FFFFFF", command=lambda: self.worker.send_command("M1")).pack(side="right", expand=True, padx=(4, 0))
+        ctk.CTkButton(mode_row, text="▶ Bench Mode", width=134, height=30, corner_radius=8, fg_color=PALETTE["green"], hover_color=PALETTE["green_bright"], font=ctk.CTkFont(weight="bold"), command=lambda: self.worker.send_command("M0")).pack(side="left", expand=True, padx=(0, 4))
+        ctk.CTkButton(mode_row, text="Tile ADC", width=134, height=30, corner_radius=8, fg_color=PALETTE["amber"], hover_color="#D97706", text_color="#FFFFFF", font=ctk.CTkFont(weight="bold"), command=lambda: self.worker.send_command("M1")).pack(side="right", expand=True, padx=(4, 0))
 
         wave_card = ctk.CTkFrame(mid, fg_color=PALETTE["card"], border_width=1, border_color=PALETTE["border"], corner_radius=14)
         wave_card.grid(row=0, column=1, sticky="nsew")
         w_head = ctk.CTkFrame(wave_card, fg_color="transparent")
         w_head.pack(fill="x", padx=14, pady=(10, 0))
-        ctk.CTkLabel(w_head, text="Telemetry & Time-Horizon Graph", font=ctk.CTkFont(size=13, weight="bold"), text_color=PALETTE["text"]).pack(side="left")
+        ctk.CTkLabel(w_head, text="  Telemetry & Time-Horizon Graph", image=self._icons["graph"], compound="left", font=ctk.CTkFont(size=13, weight="bold"), text_color=PALETTE["text"]).pack(side="left")
         self.live_chart_seg = ctk.CTkSegmentedButton(
             w_head,
             values=["LIVE", "1H", "10H", "24H", "48H", "7D"],
             command=self._on_live_chart_mode,
+            fg_color=PALETTE["card_soft"],
             selected_color=PALETTE["green"],
+            selected_hover_color=PALETTE["green_bright"],
             unselected_color=PALETTE["card_soft"],
+            unselected_hover_color=PALETTE["sidebar_hover"],
             text_color=PALETTE["text"],
+            corner_radius=10,
         )
         self.live_chart_seg.set("LIVE")
         self.live_chart_seg.pack(side="right")
@@ -328,8 +455,8 @@ class EcoStepApp(ctk.CTk):
 
         head = ctk.CTkFrame(log_card, fg_color="transparent")
         head.grid(row=0, column=0, columnspan=2, sticky="ew", padx=14, pady=(10, 4))
-        ctk.CTkLabel(head, text="Live USB-C Telemetry Stream (telemetry_logs)", font=ctk.CTkFont(size=14, weight="bold"), text_color=PALETTE["text"]).pack(side="left")
-        ctk.CTkButton(head, text="Reset ESP32 Counter (R)", height=26, fg_color="transparent", border_width=1, border_color=PALETTE["border"], text_color=PALETTE["text"], command=self._reset_esp).pack(side="right")
+        ctk.CTkLabel(head, text="  Live USB-C Telemetry Stream (telemetry_logs)", image=self._icons["stream"], compound="left", font=ctk.CTkFont(size=14, weight="bold"), text_color=PALETTE["text"]).pack(side="left")
+        ctk.CTkButton(head, text="↻ Reset ESP32 Counter (R)", height=28, corner_radius=8, fg_color=PALETTE["card_soft"], hover_color=PALETTE["sidebar_hover"], border_width=1, border_color=PALETTE["border"], text_color=PALETTE["text"], command=self._reset_esp).pack(side="right")
 
         cols = ("log_id", "run_id", "step_number", "adc_raw", "adc_voltage", "baud_rate", "recorded_at")
         self.live_tree = ttk.Treeview(log_card, columns=cols, show="headings", style="Eco.Treeview")
@@ -343,23 +470,6 @@ class EcoStepApp(ctk.CTk):
 
         return frame
 
-    def _make_kpi(self, parent, col, title, tag, val, sub, accent):
-        card = ctk.CTkFrame(parent, fg_color=PALETTE["card"], border_width=1, border_color=PALETTE["border"], corner_radius=14)
-        card.grid(row=0, column=col, sticky="nsew", padx=(0 if col == 0 else 6, 0 if col == 3 else 6))
-        ctk.CTkFrame(card, height=4, fg_color=accent, corner_radius=4).pack(fill="x", padx=12, pady=(10, 6))
-
-        top_row = ctk.CTkFrame(card, fg_color="transparent")
-        top_row.pack(fill="x", padx=14)
-        ctk.CTkLabel(top_row, text=title, font=ctk.CTkFont(size=10, weight="bold"), text_color=PALETTE["muted"]).pack(side="left")
-        ctk.CTkLabel(top_row, text=tag, font=ctk.CTkFont(size=9, weight="bold"), fg_color=PALETTE["card_soft"], text_color=accent, corner_radius=6, padx=6, pady=1).pack(side="right")
-
-        val_lbl = ctk.CTkLabel(card, text=val, font=ctk.CTkFont(family="Consolas", size=25, weight="bold"), text_color=accent)
-        val_lbl.pack(anchor="w", padx=14, pady=(4, 4))
-        ctk.CTkFrame(card, height=1, fg_color=PALETTE["border"]).pack(fill="x", padx=14, pady=(0, 4))
-        sub_lbl = ctk.CTkLabel(card, text=sub, font=ctk.CTkFont(size=11), text_color=PALETTE["muted"])
-        sub_lbl.pack(anchor="w", padx=14, pady=(0, 10))
-        return val_lbl, sub_lbl
-
     def show_tab(self, name):
         titles = {
             "live": ("Live Telemetry Monitor", "Recycled Kinetic Mat • Real-Time USB-C Stream & 4x4 PZT Pulse Gauge"),
@@ -369,21 +479,24 @@ class EcoStepApp(ctk.CTk):
             "components": ("Project Asset & Component Inventory", "components CRUD • Hardware Specifications & Inspection Readiness"),
         }
         if name in titles:
-            t, s = titles[name]
-            self.page_title_lbl.configure(text=t)
-            self.page_sub_lbl.configure(text=s)
+            self.page_title_str, self.page_sub_str = titles[name]
+            self._redraw_topbar()
         for k, f in self.tabs.items():
             if k == name:
                 f.grid(row=0, column=0, sticky="nsew")
-                self.nav_btns[k].configure(fg_color=PALETTE["sidebar_active"])
+                self.nav_btns[k].configure(fg_color=PALETTE["sidebar_active"], border_width=1)
             else:
                 f.grid_forget()
-                self.nav_btns[k].configure(fg_color="transparent")
+                self.nav_btns[k].configure(fg_color="transparent", border_width=0)
         self.refresh_all()
 
     def _apply_theme_mode(self, mode):
         ctk.set_appearance_mode(mode)
         style_treeview(mode)
+        self._redraw_topbar()
+        self._draw_sidebar_footer()
+        for card in self.kpi_cards:
+            card.set_mode(mode)
         self.meter.set_mode(mode)
         self._redraw_waveform()
         self.tabs["time"].refresh()
@@ -408,6 +521,20 @@ class EcoStepApp(ctk.CTk):
         self.live_chart_mode = val
         self._redraw_waveform()
 
+    def _on_quick_step(self):
+        # Send live step trigger to ESP32 if connected; otherwise run offline visual bench preview
+        if self.worker.send_command("S"):
+            return
+        self.step_counter += 1
+        self.demo_volts = round(min(5.60, self.demo_volts + 0.34) if self.demo_volts < 5.4 else 0.34, 2)
+        adc_raw = int((self.demo_volts / 6.6) * 1023)
+        self.kpi_steps.set_values(val_text=str(self.step_counter))
+        self.kpi_volts.set_values(val_text=f"{self.demo_volts:.2f} V", sub_text=f"Demo preview: {adc_raw} / 1023")
+        self.meter.update_reading(self.demo_volts, adc_raw=adc_raw, pulse=True)
+        self.wave_x.append(self.step_counter)
+        self.wave_v.append(self.demo_volts)
+        self._redraw_waveform()
+
     def _init_database_on_boot(self):
         ok, err = self.db.ensure_initialized()
         if ok:
@@ -420,7 +547,7 @@ class EcoStepApp(ctk.CTk):
         PostgresSetupDialog(self, self.db, self._on_db_ready)
 
     def _on_db_ready(self):
-        self.db_status_lbl.configure(text=f"● {self.db.cfg['dbname']}", text_color="#86EFAC")
+        self.db_status_lbl.configure(text=f"● {self.db.cfg['dbname']}", text_color="#4ADE80")
         runs = self.db.list_runs(include_deleted=False)
         if not runs:
             comps = self.db.list_components()
@@ -453,9 +580,12 @@ class EcoStepApp(ctk.CTk):
     def _reset_esp(self):
         self.worker.send_command("R")
         self.step_counter = 0
+        self.demo_volts = 0.0
         self.wave_x.clear()
         self.wave_v.clear()
-        self.kpi_steps[0].configure(text="0")
+        self.kpi_steps.set_values(val_text="0")
+        self.kpi_volts.set_values(val_text="0.00 V", sub_text="Raw sample: 0 / 1023")
+        self.meter.update_reading(0.0, adc_raw=0, pulse=False)
         self._redraw_waveform()
 
     def _poll_serial_queue(self):
@@ -469,28 +599,26 @@ class EcoStepApp(ctk.CTk):
             kind = evt.get("kind")
             if kind == "connection":
                 if evt["connected"]:
-                    self.serial_status_lbl.configure(text=f"● {evt['port']} LIVE", text_color="#86EFAC")
+                    self.serial_status_lbl.configure(text=f"● {evt['port']} LIVE", text_color="#4ADE80")
                     self.top_hw_pill.configure(text=f"● {evt['port']} LIVE", text_color=PALETTE["green_bright"])
-                    self.connect_btn.configure(text="Disconnect", fg_color=PALETTE["danger"])
+                    self.connect_btn.configure(text="Disconnect", fg_color=PALETTE["danger"], text_color="#FFFFFF")
                 else:
-                    self.serial_status_lbl.configure(text="● Disconnected", text_color="#FCD34D")
-                    self.top_hw_pill.configure(text="● ESP32 OFFLINE", text_color=PALETTE["muted"])
-                    self.connect_btn.configure(text="Connect Telemetry", fg_color=PALETTE["amber"])
+                    self.serial_status_lbl.configure(text="● Disconnected", text_color=PALETTE["amber"])
+                    self.top_hw_pill.configure(text="● ESP32 OFFLINE", text_color=PALETTE["green_bright"])
+                    self.connect_btn.configure(text="Connect Telemetry", fg_color=PALETTE["green_bright"], text_color="#06140C")
             elif kind == "error":
                 self.serial_status_lbl.configure(text="● Port Error", text_color="#FCA5A5")
             elif kind == "cap":
                 raw = evt["adc_raw"]
                 volts = evt["adc_voltage"]
-                self.kpi_volts[0].configure(text=f"{volts:.2f} V")
-                self.kpi_volts[1].configure(text=f"Raw sample: {raw} / 1023")
+                self.kpi_volts.set_values(val_text=f"{volts:.2f} V", sub_text=f"Raw sample: {raw} / 1023")
                 self.meter.update_reading(volts, adc_raw=raw, pulse=False)
             elif kind == "data":
                 self.step_counter = evt["step_number"]
                 raw = evt["adc_raw"]
                 volts = evt["adc_voltage"]
-                self.kpi_steps[0].configure(text=str(self.step_counter))
-                self.kpi_volts[0].configure(text=f"{volts:.2f} V")
-                self.kpi_volts[1].configure(text=f"Raw sample: {raw} / 1023")
+                self.kpi_steps.set_values(val_text=str(self.step_counter))
+                self.kpi_volts.set_values(val_text=f"{volts:.2f} V", sub_text=f"Raw sample: {raw} / 1023")
                 self.meter.update_reading(volts, adc_raw=raw, pulse=True)
                 self.wave_x.append(self.step_counter)
                 self.wave_v.append(volts)
@@ -518,15 +646,19 @@ class EcoStepApp(ctk.CTk):
 
         if self.live_chart_mode == "LIVE" or not self.db.connected:
             if self.wave_x:
-                self.wave_ax.plot(list(self.wave_x), list(self.wave_v), marker="o", color=PALETTE["green_bright"], linewidth=2)
-                self.wave_ax.fill_between(list(self.wave_x), list(self.wave_v), color=PALETTE["green_bright"], alpha=0.18)
+                self.wave_ax.plot(
+                    list(self.wave_x), list(self.wave_v),
+                    marker="o", markersize=5, markerfacecolor="#FFFFFF", markeredgecolor=PALETTE["emerald_glow"],
+                    color=PALETTE["green_bright"], linewidth=2.4
+                )
+                self.wave_ax.fill_between(list(self.wave_x), list(self.wave_v), color=PALETTE["green_bright"], alpha=0.22)
             self.wave_ax.set_title("Supercapacitor Charge Curve (D34 • USB-C 115,200 Baud)", color=fg, fontsize=10)
             self.wave_ax.set_ylabel("V_cap (V)", color=fg, fontsize=9)
             self.wave_ax.set_ylim(0, 6.2)
         else:
             ts = self.db.get_timeseries(self.live_chart_mode.lower())
             x = list(range(len(ts["labels"])))
-            self.wave_ax.bar(x, ts["joules"], color=PALETTE["green_bright"], alpha=0.82)
+            self.wave_ax.bar(x, ts["joules"], color=PALETTE["green_bright"], alpha=0.85)
             step_tick = max(1, len(x) // 6)
             self.wave_ax.set_xticks(x[::step_tick])
             self.wave_ax.set_xticklabels(ts["labels"][::step_tick], rotation=0)
@@ -554,11 +686,15 @@ class EcoStepApp(ctk.CTk):
             led_12v_on=time_tab.led_12v_on,
             sign_mode=time_tab.sign_mode,
         )
-        self.kpi_steps[1].configure(text=f"Cadence: {cadence:.1f} steps/min")
-        self.kpi_joules[0].configure(text=f"{summary['total_joules']:.2f} J")
-        self.kpi_joules[1].configure(text=f"SoC: {eq['soc_pct']:.2f}% ({eq['wh_stored']:.4f} Wh)")
-        self.kpi_db[0].configure(text=f"{summary['telemetry_count']} logs")
-        self.kpi_db[1].configure(text=f"{summary['active_runs']} runs • {summary['sign_tests_count']} sign tests")
+        self.kpi_steps.set_values(sub_text=f"Cadence: {cadence:.1f} steps/min")
+        self.kpi_joules.set_values(
+            val_text=f"{summary['total_joules']:.2f} J",
+            sub_text=f"SoC: {eq['soc_pct']:.2f}% ({eq['wh_stored']:.4f} Wh)",
+        )
+        self.kpi_db.set_values(
+            val_text=f"{summary['telemetry_count']} logs",
+            sub_text=f"{summary['active_runs']} runs • {summary['sign_tests_count']} sign tests",
+        )
 
         logs = self.db.list_telemetry_logs(limit=40)
         self.live_tree.delete(*self.live_tree.get_children())

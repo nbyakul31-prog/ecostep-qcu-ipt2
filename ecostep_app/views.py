@@ -1,4 +1,4 @@
-"""Amplified EcoStep QCU visual gauges, zebra-striped tables, and CRUD tab views."""
+"""Neon-glass EcoStep QCU visual gauges, Pillow KPI cards, zebra-striped tables, and CRUD tab views."""
 
 import math
 import tkinter as tk
@@ -6,19 +6,121 @@ from tkinter import filedialog, messagebox, ttk
 import customtkinter as ctk
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
+from PIL import Image, ImageDraw, ImageFilter, ImageTk
 
 from . import analytics
-from .theme import PALETTE, apply_matplotlib_theme, pick
+from .theme import (
+    PALETTE,
+    apply_matplotlib_theme,
+    hex_to_rgb,
+    lerp_rgb,
+    make_icon,
+    pick,
+    render_neon_card,
+    render_supersampled_arc_gauge,
+)
+
+
+class NeonKpiCard(tk.Canvas):
+    """Pillow-rendered frosted-glass KPI card with neon rim glow & vector watermark."""
+
+    def __init__(self, master, title, tag, val, sub, accent_hex, icon_kind="foot", mode="Dark", **kwargs):
+        super().__init__(
+            master,
+            height=112,
+            highlightthickness=0,
+            bd=0,
+            bg=pick(PALETTE["bg"], mode),
+            **kwargs,
+        )
+        self.title_txt = title
+        self.tag_txt = tag
+        self.val_txt = val
+        self.sub_txt = sub
+        self.accent_hex = accent_hex
+        self.icon_kind = icon_kind
+        self.mode = mode
+        self._bg_photo = None
+        self._icon_photo = None
+        self._last_size = (0, 0, None)
+        self.bind("<Configure>", self._on_resize)
+
+    def _on_resize(self, event):
+        if event.width > 40 and event.height > 40:
+            if (event.width, event.height, self.mode) != self._last_size:
+                self._redraw(event.width, event.height)
+
+    def set_mode(self, mode):
+        self.mode = mode
+        self.configure(bg=pick(PALETTE["bg"], mode))
+        w = self.winfo_width() or 240
+        h = self.winfo_height() or 112
+        self._redraw(w, h)
+
+    def set_values(self, val_text=None, sub_text=None):
+        if val_text is not None:
+            self.val_txt = val_text
+        if sub_text is not None:
+            self.sub_txt = sub_text
+        if self.find_withtag("val_lbl"):
+            self.itemconfigure("val_lbl", text=self.val_txt)
+        if self.find_withtag("sub_lbl"):
+            self.itemconfigure("sub_lbl", text=self.sub_txt)
+
+    def _redraw(self, w, h):
+        self._last_size = (w, h, self.mode)
+        self.delete("all")
+
+        img = render_neon_card(w, h, self.accent_hex, self.mode, icon_kind=self.icon_kind, radius=14)
+        self._bg_photo = ImageTk.PhotoImage(img)
+        self.create_image(0, 0, anchor="nw", image=self._bg_photo)
+
+        # Small top-left icon glyph
+        icon_map = {"foot": "live", "cap": "bolt", "battery": "runs", "ledger": "db"}
+        ic_img = make_icon(icon_map.get(self.icon_kind, "live"), size=14, color=self.accent_hex)
+        self._icon_photo = ImageTk.PhotoImage(ic_img)
+        self.create_image(15, 19, anchor="w", image=self._icon_photo)
+
+        title_col = "#CBE7D2" if self.mode == "Dark" else pick(PALETTE["muted"], self.mode)
+        sub_col = "#8BB297" if self.mode == "Dark" else pick(PALETTE["muted"], self.mode)
+        val_col = "#FFFFFF" if self.mode == "Dark" else self.accent_hex
+        if self.icon_kind == "cap" and self.mode == "Dark":
+            val_col = "#FBBF24"
+        elif self.icon_kind == "battery" and self.mode == "Dark":
+            val_col = "#E0F2FE"
+
+        self.create_text(35, 19, anchor="w", text=self.title_txt, font=("Segoe UI", 9, "bold"), fill=title_col)
+
+        # Top-right tag pill
+        pill_w = max(36, len(self.tag_txt) * 7 + 16)
+        px0, py0, px1, py1 = w - pill_w - 13, 10, w - 13, 28
+        pill_bg = "#13291E" if self.mode == "Dark" else pick(PALETTE["card_soft"], self.mode)
+        self.create_rectangle(px0, py0, px1, py1, fill=pill_bg, outline=self.accent_hex, width=1)
+        self.create_text((px0 + px1) // 2, (py0 + py1) // 2, text=self.tag_txt, font=("Consolas", 8, "bold"), fill=self.accent_hex)
+
+        # Main metric value
+        self.create_text(
+            16, int(h * 0.50), anchor="w", text=self.val_txt,
+            font=("Consolas", 21, "bold"), fill=val_col, tags="val_lbl"
+        )
+
+        # Subtle divider & footer sublabel
+        div_col = "#1D3B2A" if self.mode == "Dark" else pick(PALETTE["border"], self.mode)
+        self.create_line(16, h - 29, w - 16, h - 29, fill=div_col, width=1)
+        self.create_text(
+            16, h - 15, anchor="w", text=self.sub_txt,
+            font=("Segoe UI", 9), fill=sub_col, tags="sub_lbl"
+        )
 
 
 class VoltageMeterCanvas(tk.Canvas):
-    """Dual-instrument 0-15V gauge + interactive 4x4 PZT Recycled Eco-Mat ripple pad."""
+    """Dual-instrument 0-6V Pillow anti-aliased gauge + interactive 4x4 PZT Recycled Eco-Mat ripple pad."""
 
-    def __init__(self, master, mode="Light", on_tile_click=None, **kwargs):
+    def __init__(self, master, mode="Dark", on_tile_click=None, **kwargs):
         super().__init__(
             master,
-            width=300,
-            height=245,
+            width=308,
+            height=248,
             highlightthickness=0,
             cursor="hand2" if on_tile_click else "",
             bg=pick(PALETTE["card"], mode),
@@ -29,6 +131,7 @@ class VoltageMeterCanvas(tk.Canvas):
         self.adc_raw = 0
         self.pulse_alpha = 0
         self.on_tile_click = on_tile_click
+        self._arc_photo = None
         if on_tile_click:
             self.bind("<Button-1>", self._handle_click)
         self.redraw()
@@ -56,83 +159,75 @@ class VoltageMeterCanvas(tk.Canvas):
 
     def redraw(self):
         self.delete("all")
-        bg_track = "#D5E4CC" if self.mode == "Light" else "#203626"
+        bg_track = "#D5E4CC" if self.mode == "Light" else "#1D3627"
         txt_col = pick(PALETTE["text"], self.mode)
         mut_col = pick(PALETTE["muted"], self.mode)
-        pad_bg = pick(PALETTE["card_soft"], self.mode)
-        pad_border = pick(PALETTE["border"], self.mode)
+        pad_bg = "#E8F2E4" if self.mode == "Light" else "#0A1B12"
+        pad_border = "#C2D8B8" if self.mode == "Light" else "#214A32"
 
-        cx, cy, r = 150, 112, 86
-        # Colored zone guides under main arc (0 - 6.0 V Supercapacitor scale)
-        self.create_arc(
-            cx - r, cy - r, cx + r, cy + r,
-            start=0, extent=180, style="arc", width=15, outline=bg_track
-        )
+        cx, cy, r = 154, 113, 90
         frac = min(1.0, self.volts / 6.0)
-        if frac > 0.01:
-            col = PALETTE["amber"] if self.volts >= 4.2 else PALETTE["green_bright"]
-            self.create_arc(
-                cx - r, cy - r, cx + r, cy + r,
-                start=180, extent=-(180 * frac), style="arc", width=15, outline=col
-            )
+        arc_col = PALETTE["amber"] if self.volts >= 4.2 else PALETTE["green_bright"]
+        arc_img = render_supersampled_arc_gauge(308, 130, cx, cy, r, frac, arc_col, bg_track, self.mode)
+        self._arc_photo = ImageTk.PhotoImage(arc_img)
+        self.create_image(0, 0, anchor="nw", image=self._arc_photo)
 
-        # Tick marks (0, 1, 2, 3, 4, 5, 6 V)
+        # Tick marks (0..6 V)
         for v_mark in (0, 1, 2, 3, 4, 5, 6):
             ang = math.radians(180 - (v_mark / 6.0) * 180)
-            x1 = cx + (r - 11) * math.cos(ang)
-            y1 = cy - (r - 11) * math.sin(ang)
+            x1 = cx + (r - 12) * math.cos(ang)
+            y1 = cy - (r - 12) * math.sin(ang)
             x2 = cx + (r + 3) * math.cos(ang)
             y2 = cy - (r + 3) * math.sin(ang)
-            self.create_line(x1, y1, x2, y2, fill=mut_col, width=1.5)
-            lx = cx + (r - 23) * math.cos(ang)
-            ly = cy - (r - 23) * math.sin(ang)
-            self.create_text(lx, ly, text=str(v_mark), font=("Consolas", 8), fill=mut_col)
+            self.create_line(x1, y1, x2, y2, fill=mut_col, width=1.4)
+            lx = cx + (r - 22) * math.cos(ang)
+            ly = cy - (r - 22) * math.sin(ang) - (6 if v_mark in (0, 6) else 0)
+            self.create_text(lx, ly, text=str(v_mark), font=("Consolas", 8, "bold"), fill=mut_col)
 
         # Needle + hub
         n_ang = math.radians(180 - frac * 180)
-        nx = cx + (r - 15) * math.cos(n_ang)
-        ny = cy - (r - 15) * math.sin(n_ang)
-        needle_col = PALETTE["amber"] if self.pulse_alpha > 0 else PALETTE["green"]
-        self.create_line(cx, cy, nx, ny, fill=needle_col, width=3)
-        self.create_oval(cx - 7, cy - 7, cx + 7, cy + 7, fill=needle_col, outline=txt_col, width=1.5)
+        nx = cx + (r - 16) * math.cos(n_ang)
+        ny = cy - (r - 16) * math.sin(n_ang)
+        needle_col = PALETTE["amber"] if self.pulse_alpha > 0 else PALETTE["emerald_glow"]
+        self.create_line(cx, cy + 4, nx, ny, fill=needle_col, width=3)
+        self.create_oval(cx - 5, cy - 1, cx + 5, cy + 9, fill=needle_col, outline=txt_col, width=1.5)
 
-        self.create_text(cx, cy - 26, text=f"{self.volts:.2f} V", font=("Consolas", 19, "bold"), fill=txt_col)
-        self.create_text(cx, cy - 7, text=f"10-bit ADC: {self.adc_raw} / 1023", font=("Consolas", 8), fill=mut_col)
+        self.create_text(cx, cy - 33, text=f"{self.volts:.2f} V", font=("Consolas", 19, "bold"), fill=txt_col)
+        self.create_text(cx, cy - 13, text=f"Raw ADC: {self.adc_raw}/1023", font=("Consolas", 8), fill=mut_col)
 
         # Interactive 4x4 PZT Recycled Eco-Mat Tile Pad
         is_hit = self.pulse_alpha > 0
         box_outline = PALETTE["amber"] if is_hit else pad_border
-        self.create_rectangle(16, 134, 284, 236, fill=pad_bg, outline=box_outline, width=2 if is_hit else 1.2)
+        self.create_rectangle(14, 134, 294, 238, fill=pad_bg, outline=box_outline, width=2 if is_hit else 1.2)
 
-        # 4x4 PZT Brass/Ceramic Discs on Left Side of Mat
-        ring_col = PALETTE["gold"] if is_hit else "#B89B5E"
+        # 4x4 PZT Glowing Disc Matrix
+        ring_col = PALETTE["gold"] if is_hit else ("#84A98E" if self.mode == "Dark" else "#B89B5E")
         core_col = "#FFFBEB" if is_hit else PALETTE["green_bright"]
         for r_i in range(4):
             for c_i in range(4):
-                dx = 30 + c_i * 22
-                dy = 146 + r_i * 20
-                self.create_oval(dx, dy, dx + 15, dy + 15, fill=ring_col, outline="")
-                self.create_oval(dx + 4, dy + 4, dx + 11, dy + 11, fill=core_col, outline="")
+                dx = 28 + c_i * 22
+                dy = 146 + r_i * 21
+                self.create_oval(dx, dy, dx + 15, dy + 15, fill="", outline=ring_col, width=1.6)
+                self.create_oval(dx + 3, dy + 3, dx + 12, dy + 12, fill=core_col, outline="")
 
-        # Ripple rings during pulse
         if is_hit:
-            spread = (6 - self.pulse_alpha) * 6
+            spread = (6 - self.pulse_alpha) * 7
             self.create_oval(
-                72 - spread, 185 - spread, 72 + spread, 185 + spread,
+                69 - spread, 186 - spread, 69 + spread, 186 + spread,
                 outline=PALETTE["amber"], width=2
             )
 
         status_txt = "PULSE CAPTURED!" if is_hit else "4x4 ECO-MAT READY"
-        status_col = PALETTE["amber"] if is_hit else PALETTE["green_bright"]
-        self.create_text(204, 166, text=status_txt, font=("Segoe UI", 10, "bold"), fill=status_col)
-        self.create_text(204, 186, text="16x PZT-5A Matrix", font=("Segoe UI", 9), fill=mut_col)
-        self.create_text(204, 206, text="[Click mat to test step]", font=("Segoe UI", 8, "italic"), fill=mut_col)
+        status_col = PALETTE["amber"] if is_hit else PALETTE["emerald_glow"]
+        self.create_text(210, 166, text=status_txt, font=("Segoe UI", 10, "bold"), fill=status_col)
+        self.create_text(210, 186, text="16x PZT-5A Matrix", font=("Segoe UI", 9), fill=mut_col)
+        self.create_text(210, 206, text="[Click mat to test step]", font=("Segoe UI", 8, "italic"), fill=mut_col)
 
 
 class BatteryRingCanvas(tk.Canvas):
-    """Circular radial SoC % ring gauge for the Time & Equivalences view."""
+    """2x supersampled radial SoC % ring gauge for the Time & Equivalences view."""
 
-    def __init__(self, master, mode="Light", **kwargs):
+    def __init__(self, master, mode="Dark", **kwargs):
         super().__init__(
             master,
             width=128,
@@ -144,6 +239,7 @@ class BatteryRingCanvas(tk.Canvas):
         self.mode = mode
         self.soc = 0.0
         self.wh = 0.0
+        self._ring_photo = None
         self.redraw()
 
     def set_mode(self, mode):
@@ -158,27 +254,43 @@ class BatteryRingCanvas(tk.Canvas):
 
     def redraw(self):
         self.delete("all")
-        track = "#D5E4CC" if self.mode == "Light" else "#203626"
+        track_hex = "#D5E4CC" if self.mode == "Light" else "#1B3526"
         txt = pick(PALETTE["text"], self.mode)
         mut = pick(PALETTE["muted"], self.mode)
 
-        pad = 14
-        self.create_oval(pad, pad, 128 - pad, 128 - pad, outline=track, width=11)
-        if self.soc > 0.1:
-            extent = -(359.9 * (self.soc / 100.0))
-            col = PALETTE["amber"] if self.soc < 20 else PALETTE["green_bright"]
-            self.create_arc(pad, pad, 128 - pad, 128 - pad, start=90, extent=extent, style="arc", width=11, outline=col)
+        scale = 2
+        S = 128 * scale
+        pad = 14 * scale
+        img = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+        d = ImageDraw.Draw(img)
+        d.ellipse((pad, pad, S - pad, S - pad), outline=hex_to_rgb(track_hex) + (255,), width=11 * scale)
 
+        if self.soc > 0.1:
+            col_hex = PALETTE["amber"] if self.soc < 20 else PALETTE["green_bright"]
+            col_rgb = hex_to_rgb(col_hex)
+            end_deg = int(round(-90 + 360 * (self.soc / 100.0)))
+            glow = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+            ImageDraw.Draw(glow).arc((pad, pad, S - pad, S - pad), start=-90, end=end_deg, fill=col_rgb + (130,), width=15 * scale)
+            glow = glow.filter(ImageFilter.GaussianBlur(radius=5))
+            img = Image.alpha_composite(img, glow)
+            ImageDraw.Draw(img).arc(
+                (pad, pad, S - pad, S - pad), start=-90, end=end_deg,
+                fill=lerp_rgb(col_rgb, (255, 255, 255), 0.15) + (255,), width=11 * scale
+            )
+
+        self._ring_photo = ImageTk.PhotoImage(img.resize((128, 128), Image.Resampling.LANCZOS))
+        self.create_image(0, 0, anchor="nw", image=self._ring_photo)
         self.create_text(64, 56, text=f"{self.soc:.1f}%", font=("Consolas", 15, "bold"), fill=txt)
         self.create_text(64, 75, text=f"{self.wh:.3f} Wh", font=("Consolas", 9), fill=mut)
 
 
-def style_treeview(mode="Light"):
+def style_treeview(mode="Dark"):
     style = ttk.Style()
     style.theme_use("clam")
     bg = pick(PALETTE["card"], mode)
     fg = pick(PALETTE["text"], mode)
-    head_bg = pick(PALETTE["card_soft"], mode)
+    head_bg = "#E5EFE0" if mode == "Light" else "#10271B"
+    head_fg = "#17261B" if mode == "Light" else "#9BE7B4"
     border_col = pick(PALETTE["border"], mode)
     sel_bg = PALETTE["green"]
 
@@ -187,7 +299,7 @@ def style_treeview(mode="Light"):
         background=bg,
         foreground=fg,
         fieldbackground=bg,
-        rowheight=30,
+        rowheight=29,
         borderwidth=0,
         relief="flat",
         font=("Segoe UI", 10),
@@ -195,7 +307,7 @@ def style_treeview(mode="Light"):
     style.configure(
         "Eco.Treeview.Heading",
         background=head_bg,
-        foreground=fg,
+        foreground=head_fg,
         bordercolor=border_col,
         relief="flat",
         padding=(6, 7),
@@ -205,7 +317,7 @@ def style_treeview(mode="Light"):
     style.map("Eco.Treeview.Heading", background=[("active", border_col)])
 
 
-def configure_tree_zebra(tree, mode="Light"):
+def configure_tree_zebra(tree, mode="Dark"):
     tree.tag_configure("even", background=pick(PALETTE["row_even"], mode), foreground=pick(PALETTE["text"], mode))
     tree.tag_configure("odd", background=pick(PALETTE["row_odd"], mode), foreground=pick(PALETTE["text"], mode))
 
@@ -241,6 +353,11 @@ def styled_option(parent, variable, values, command=None):
     )
 
 
+def _ctk_icon(kind, size=15, color="#22C55E"):
+    pil_img = make_icon(kind, size=size, color=color)
+    return ctk.CTkImage(light_image=pil_img, dark_image=pil_img, size=(size, size))
+
+
 class MeasurementRunsView(ctk.CTkFrame):
     """CRUD + soft-delete + mWh->Joules analytics view for measurement_runs."""
 
@@ -258,12 +375,15 @@ class MeasurementRunsView(ctk.CTkFrame):
         form.grid(row=0, column=0, sticky="ew", pady=(0, 10))
         form.grid_columnconfigure((0, 1, 2, 3), weight=1)
 
+        hdr = ctk.CTkFrame(form, fg_color="transparent")
+        hdr.grid(row=0, column=0, columnspan=4, sticky="ew", padx=16, pady=(12, 6))
         ctk.CTkLabel(
-            form, text="100-Step Benchmark Trial Editor (measurement_runs)",
+            hdr, text="  100-Step Benchmark Trial Editor (measurement_runs)",
+            image=_ctk_icon("runs", 16, "#22C55E"), compound="left",
             font=ctk.CTkFont(size=14, weight="bold"), text_color=PALETTE["text"]
-        ).grid(row=0, column=0, columnspan=4, sticky="w", padx=16, pady=(12, 6))
+        ).pack(side="left")
 
-        self.comp_var = ctk.StringVar(value="")
+        self.comp_var = ctk.StringVar(value="1: PZT-5A Piezo Mat")
         self.op_entry = styled_entry(form, "Operator Name (e.g. L. Britania)")
         self.steps_entry = styled_entry(form, "Steps (100)")
         self.steps_entry.insert(0, "100")
@@ -276,6 +396,7 @@ class MeasurementRunsView(ctk.CTkFrame):
 
         self.comp_menu = styled_option(form, self.comp_var, ["No Component"])
         self.path_menu = styled_option(form, self.path_var, ["Path A", "Path B"])
+        self.path_menu.configure(fg_color=PALETTE["card_soft"], button_color="#1D442E", text_color=PALETTE["text"])
         self.status_menu = styled_option(form, self.status_var, ["Pending", "Completed", "Invalid"])
 
         self.comp_menu.grid(row=1, column=0, padx=12, pady=6, sticky="ew")
@@ -290,7 +411,7 @@ class MeasurementRunsView(ctk.CTkFrame):
         self.preview_lbl = ctk.CTkLabel(
             form, text="Auto-Calc: 0.72 J | 0.0072 J/step",
             font=ctk.CTkFont(family="Consolas", size=12, weight="bold"),
-            text_color=PALETTE["amber"]
+            text_color=PALETTE["gold"]
         )
         self.preview_lbl.grid(row=2, column=3, padx=12, pady=6, sticky="w")
         self.steps_entry.bind("<KeyRelease>", lambda _e: self._update_preview())
@@ -298,24 +419,25 @@ class MeasurementRunsView(ctk.CTkFrame):
 
         btns = ctk.CTkFrame(form, fg_color="transparent")
         btns.grid(row=3, column=0, columnspan=4, sticky="ew", padx=12, pady=(4, 12))
-        ctk.CTkButton(btns, text="+ Create Run", fg_color=PALETTE["green"], hover_color=PALETTE["green_bright"], command=self._create_run).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(btns, text="Update Selected", fg_color=PALETTE["amber"], text_color="#FFFFFF", command=self._update_run).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(btns, text="Set Active for Live Telemetry", fg_color=PALETTE["teal"], command=self._set_active).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(btns, text="Soft Delete", fg_color=PALETTE["danger"], command=lambda: self._toggle_delete(True)).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(btns, text="Restore", fg_color="gray45", command=lambda: self._toggle_delete(False)).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(btns, text="Export CSV", fg_color="transparent", border_width=1, border_color=PALETTE["border"], text_color=PALETTE["text"], command=self._export_csv).pack(side="right")
+        ctk.CTkButton(btns, text="+ Create Run", fg_color=PALETTE["amber"], hover_color="#D97706", text_color="#FFFFFF", font=ctk.CTkFont(weight="bold"), corner_radius=9, command=self._create_run).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(btns, text="Update Selected", fg_color=PALETTE["blue"], hover_color=PALETTE["blue_hover"], text_color="#FFFFFF", font=ctk.CTkFont(weight="bold"), corner_radius=9, command=self._update_run).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(btns, text="Set Active for Live Telemetry", fg_color=PALETTE["cyan"], hover_color=PALETTE["cyan_hover"], text_color="#FFFFFF", font=ctk.CTkFont(weight="bold"), corner_radius=9, command=self._set_active).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(btns, text="× Soft Delete", fg_color=PALETTE["danger"], hover_color="#DC2626", text_color="#FFFFFF", font=ctk.CTkFont(weight="bold"), corner_radius=9, command=lambda: self._toggle_delete(True)).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(btns, text="Restore", fg_color="#475569", hover_color="#64748B", text_color="#FFFFFF", font=ctk.CTkFont(weight="bold"), corner_radius=9, command=lambda: self._toggle_delete(False)).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(btns, text=" Export CSV", image=_ctk_icon("download", 14, "#EBF7EE"), compound="left", fg_color=PALETTE["card_soft"], hover_color=PALETTE["sidebar_hover"], border_width=1, border_color=PALETTE["border"], text_color=PALETTE["text"], corner_radius=9, command=self._export_csv).pack(side="right")
 
         fbar = ctk.CTkFrame(self, fg_color=PALETTE["card"], border_width=1, border_color=PALETTE["border"], corner_radius=12)
         fbar.grid(row=1, column=0, sticky="ew", pady=(0, 10))
+        ctk.CTkLabel(fbar, text="", image=_ctk_icon("search", 15, "#84A98E")).pack(side="left", padx=(12, 4), pady=8)
         self.search_entry = styled_entry(fbar, "Search operator or component...", width=260)
-        self.search_entry.pack(side="left", padx=12, pady=8)
+        self.search_entry.pack(side="left", padx=(0, 8), pady=8)
         self.search_entry.bind("<KeyRelease>", lambda _e: self.refresh())
 
         self.filter_status = ctk.StringVar(value="ALL")
         styled_option(fbar, self.filter_status, ["ALL", "Pending", "Completed", "Invalid"], command=lambda _v: self.refresh()).pack(side="left", padx=6, pady=8)
 
         self.show_deleted = ctk.BooleanVar(value=False)
-        ctk.CTkCheckBox(fbar, text="Show Soft-Deleted", variable=self.show_deleted, text_color=PALETTE["text"], command=self.refresh).pack(side="left", padx=12, pady=8)
+        ctk.CTkCheckBox(fbar, text="Show Soft-Deleted", variable=self.show_deleted, fg_color=PALETTE["green_bright"], hover_color=PALETTE["green"], text_color=PALETTE["text"], command=self.refresh).pack(side="left", padx=12, pady=8)
 
         split = ctk.CTkFrame(self, fg_color="transparent")
         split.grid(row=2, column=0, sticky="nsew")
@@ -325,26 +447,40 @@ class MeasurementRunsView(ctk.CTkFrame):
 
         tbl_card = ctk.CTkFrame(split, fg_color=PALETTE["card"], border_width=1, border_color=PALETTE["border"], corner_radius=14)
         tbl_card.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
-        tbl_card.grid_rowconfigure(0, weight=1)
+        tbl_card.grid_rowconfigure(1, weight=1)
         tbl_card.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(
+            tbl_card, text="  Runs Log",
+            image=_ctk_icon("db", 15, "#22C55E"), compound="left",
+            font=ctk.CTkFont(size=13, weight="bold"), text_color=PALETTE["text"]
+        ).grid(row=0, column=0, columnspan=2, sticky="w", padx=14, pady=(10, 4))
 
         cols = ("run_id", "component", "operator", "steps", "mwh", "joules", "j_step", "peak_v", "path", "status")
         self.tree = ttk.Treeview(tbl_card, columns=cols, show="headings", style="Eco.Treeview")
-        for c, w in zip(cols, (50, 150, 105, 52, 65, 65, 70, 62, 62, 82)):
+        for c, w in zip(cols, (48, 128, 88, 46, 52, 54, 58, 54, 52, 68)):
             self.tree.heading(c, text=c.upper())
-            self.tree.column(c, width=w, anchor="center" if c in ("run_id", "steps", "mwh", "joules", "j_step", "peak_v") else "w")
-        self.tree.grid(row=0, column=0, sticky="nsew", padx=(10, 0), pady=10)
+            self.tree.column(c, width=w, minwidth=40, anchor="center" if c in ("run_id", "steps", "mwh", "joules", "j_step", "peak_v") else "w")
+        self.tree.grid(row=1, column=0, sticky="nsew", padx=(10, 0), pady=(2, 10))
         sb = ctk.CTkScrollbar(tbl_card, command=self.tree.yview)
-        sb.grid(row=0, column=1, sticky="ns", padx=(2, 8), pady=10)
+        sb.grid(row=1, column=1, sticky="ns", padx=(2, 8), pady=(2, 10))
         self.tree.configure(yscrollcommand=sb.set)
         self.tree.bind("<<TreeviewSelect>>", self._on_select)
 
         chart_card = ctk.CTkFrame(split, fg_color=PALETTE["card"], border_width=1, border_color=PALETTE["border"], corner_radius=14)
         chart_card.grid(row=0, column=1, sticky="nsew")
-        self.fig = Figure(figsize=(4.2, 3.2), dpi=96)
+        ctk.CTkLabel(
+            chart_card, text="  Harvested Energy per Run (Joules)",
+            image=_ctk_icon("trend", 15, "#22C55E"), compound="left",
+            font=ctk.CTkFont(size=13, weight="bold"), text_color=PALETTE["text"]
+        ).pack(anchor="w", padx=14, pady=(10, 2))
+        self.fig = Figure(figsize=(4.2, 3.0), dpi=96)
         self.ax = self.fig.add_subplot(111)
+        apply_matplotlib_theme(self.fig, self.ax, "Dark")
+        self.ax.set_ylim(-0.05, 0.05)
+        self.fig.tight_layout()
         self.canvas = FigureCanvasTkAgg(self.fig, master=chart_card)
-        self.canvas.get_tk_widget().pack(fill="both", expand=True, padx=10, pady=10)
+        self.canvas.get_tk_widget().pack(fill="both", expand=True, padx=10, pady=(2, 10))
 
     def _update_preview(self):
         try:
@@ -477,8 +613,11 @@ class MeasurementRunsView(ctk.CTkFrame):
         if active:
             labels = [f"#{r['run_id']}" for r in active]
             vals = [float(r["energy_joules"]) for r in active]
-            self.ax.bar(labels, vals, color=PALETTE["green_bright"])
-        self.ax.set_title("Harvested Energy per Run (Joules)", color=fg, fontsize=10)
+            self.ax.bar(labels, vals, color=PALETTE["green_bright"], edgecolor=PALETTE["emerald_glow"], linewidth=0.9, alpha=0.9)
+        else:
+            self.ax.set_ylim(-0.05, 0.05)
+            self.ax.set_xlim(-2.5, -0.5)
+        self.ax.set_ylabel("Joules (J)", color=fg, fontsize=8)
         self.fig.tight_layout()
         self.canvas.draw_idle()
 
@@ -501,7 +640,8 @@ class SignTestsView(ctk.CTkFrame):
         form.grid_columnconfigure((0, 1, 2, 3), weight=1)
 
         ctk.CTkLabel(
-            form, text="5V Emergency Sign Load & Runtime Verification (sign_tests)",
+            form, text="  5V Emergency Sign Load & Runtime Verification (sign_tests)",
+            image=_ctk_icon("bolt", 16, "#22C55E"), compound="left",
             font=ctk.CTkFont(size=14, weight="bold"), text_color=PALETTE["text"]
         ).grid(row=0, column=0, columnspan=4, sticky="w", padx=16, pady=(12, 6))
 
@@ -524,20 +664,20 @@ class SignTestsView(ctk.CTkFrame):
         self.min_entry.grid(row=1, column=3, padx=12, pady=6, sticky="ew")
 
         self.status_menu.grid(row=2, column=0, padx=12, pady=6, sticky="ew")
-        ctk.CTkCheckBox(form, text="Sign Mode Active (is_available)", variable=self.avail_var, text_color=PALETTE["text"]).grid(row=2, column=1, padx=12, pady=6, sticky="w")
+        ctk.CTkCheckBox(form, text="Sign Mode Active (is_available)", variable=self.avail_var, fg_color=PALETTE["green_bright"], hover_color=PALETTE["green"], text_color=PALETTE["text"]).grid(row=2, column=1, padx=12, pady=6, sticky="w")
         self.preview_lbl = ctk.CTkLabel(
             form, text="Resistor: 1.5 kΩ | P = 5V × 25.0mA = 125.00 mW",
             font=ctk.CTkFont(family="Consolas", size=12, weight="bold"),
-            text_color=PALETTE["amber"]
+            text_color=PALETTE["gold"]
         )
         self.preview_lbl.grid(row=2, column=2, columnspan=2, padx=12, pady=6, sticky="w")
         self.ma_entry.bind("<KeyRelease>", lambda _e: self._update_preview())
 
         btns = ctk.CTkFrame(form, fg_color="transparent")
         btns.grid(row=3, column=0, columnspan=4, sticky="ew", padx=12, pady=(4, 12))
-        ctk.CTkButton(btns, text="+ Log Sign Test", fg_color=PALETTE["green"], command=self._add_test).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(btns, text="Update Selected", fg_color=PALETTE["amber"], text_color="#FFFFFF", command=self._update_test).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(btns, text="Delete Selected", fg_color=PALETTE["danger"], command=self._delete_test).pack(side="left")
+        ctk.CTkButton(btns, text="+ Log Sign Test", fg_color=PALETTE["amber"], hover_color="#D97706", text_color="#FFFFFF", font=ctk.CTkFont(weight="bold"), corner_radius=9, command=self._add_test).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(btns, text="Update Selected", fg_color=PALETTE["blue"], hover_color=PALETTE["blue_hover"], text_color="#FFFFFF", font=ctk.CTkFont(weight="bold"), corner_radius=9, command=self._update_test).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(btns, text="× Delete Selected", fg_color=PALETTE["danger"], hover_color="#DC2626", text_color="#FFFFFF", font=ctk.CTkFont(weight="bold"), corner_radius=9, command=self._delete_test).pack(side="left")
 
         fbar = ctk.CTkFrame(self, fg_color=PALETTE["card"], border_width=1, border_color=PALETTE["border"], corner_radius=12)
         fbar.grid(row=1, column=0, sticky="ew", pady=(0, 10))
@@ -547,17 +687,23 @@ class SignTestsView(ctk.CTkFrame):
 
         tbl_card = ctk.CTkFrame(self, fg_color=PALETTE["card"], border_width=1, border_color=PALETTE["border"], corner_radius=14)
         tbl_card.grid(row=2, column=0, sticky="nsew")
-        tbl_card.grid_rowconfigure(0, weight=1)
+        tbl_card.grid_rowconfigure(1, weight=1)
         tbl_card.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(
+            tbl_card, text="  Sign Verification Log",
+            image=_ctk_icon("db", 15, "#22C55E"), compound="left",
+            font=ctk.CTkFont(size=13, weight="bold"), text_color=PALETTE["text"]
+        ).grid(row=0, column=0, columnspan=2, sticky="w", padx=14, pady=(10, 4))
 
         cols = ("test_id", "run_id", "sign_mode", "resistor", "load_ma", "power_mw", "runtime_min", "status", "available")
         self.tree = ttk.Treeview(tbl_card, columns=cols, show="headings", style="Eco.Treeview")
         for c, w in zip(cols, (65, 65, 80, 80, 90, 95, 100, 95, 85)):
             self.tree.heading(c, text=c.upper())
             self.tree.column(c, width=w, anchor="center")
-        self.tree.grid(row=0, column=0, sticky="nsew", padx=(10, 0), pady=10)
+        self.tree.grid(row=1, column=0, sticky="nsew", padx=(10, 0), pady=(2, 10))
         sb = ctk.CTkScrollbar(tbl_card, command=self.tree.yview)
-        sb.grid(row=0, column=1, sticky="ns", padx=(2, 8), pady=10)
+        sb.grid(row=1, column=1, sticky="ns", padx=(2, 8), pady=(2, 10))
         self.tree.configure(yscrollcommand=sb.set)
         self.tree.bind("<<TreeviewSelect>>", self._on_select)
 
@@ -670,7 +816,8 @@ class ComponentsView(ctk.CTkFrame):
         form.grid_columnconfigure((0, 1, 2), weight=1)
 
         ctk.CTkLabel(
-            form, text="Project Asset & Component Inventory (components — Functional Specs Only)",
+            form, text="  Project Asset & Component Inventory (components — Functional Specs Only)",
+            image=_ctk_icon("cube", 16, "#22C55E"), compound="left",
             font=ctk.CTkFont(size=14, weight="bold"), text_color=PALETTE["text"]
         ).grid(row=0, column=0, columnspan=3, sticky="w", padx=16, pady=(12, 6))
 
@@ -692,14 +839,15 @@ class ComponentsView(ctk.CTkFrame):
 
         btns = ctk.CTkFrame(form, fg_color="transparent")
         btns.grid(row=3, column=0, columnspan=3, sticky="ew", padx=12, pady=(4, 12))
-        ctk.CTkButton(btns, text="+ Add Component", fg_color=PALETTE["green"], command=self._add_comp).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(btns, text="Update Selected", fg_color=PALETTE["amber"], text_color="#FFFFFF", command=self._update_comp).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(btns, text="Delete Selected", fg_color=PALETTE["danger"], command=self._del_comp).pack(side="left")
+        ctk.CTkButton(btns, text="+ Add Component", fg_color=PALETTE["amber"], hover_color="#D97706", text_color="#FFFFFF", font=ctk.CTkFont(weight="bold"), corner_radius=9, command=self._add_comp).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(btns, text="Update Selected", fg_color=PALETTE["blue"], hover_color=PALETTE["blue_hover"], text_color="#FFFFFF", font=ctk.CTkFont(weight="bold"), corner_radius=9, command=self._update_comp).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(btns, text="× Delete Selected", fg_color=PALETTE["danger"], hover_color="#DC2626", text_color="#FFFFFF", font=ctk.CTkFont(weight="bold"), corner_radius=9, command=self._del_comp).pack(side="left")
 
         fbar = ctk.CTkFrame(self, fg_color=PALETTE["card"], border_width=1, border_color=PALETTE["border"], corner_radius=12)
         fbar.grid(row=1, column=0, sticky="ew", pady=(0, 10))
+        ctk.CTkLabel(fbar, text="", image=_ctk_icon("search", 15, "#84A98E")).pack(side="left", padx=(12, 4), pady=8)
         self.search_entry = styled_entry(fbar, "Search components...", width=240)
-        self.search_entry.pack(side="left", padx=12, pady=8)
+        self.search_entry.pack(side="left", padx=(0, 8), pady=8)
         self.search_entry.bind("<KeyRelease>", lambda _e: self.refresh())
 
         self.filter_cat = ctk.StringVar(value="ALL")
@@ -709,17 +857,23 @@ class ComponentsView(ctk.CTkFrame):
 
         tbl_card = ctk.CTkFrame(self, fg_color=PALETTE["card"], border_width=1, border_color=PALETTE["border"], corner_radius=14)
         tbl_card.grid(row=2, column=0, sticky="nsew")
-        tbl_card.grid_rowconfigure(0, weight=1)
+        tbl_card.grid_rowconfigure(1, weight=1)
         tbl_card.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(
+            tbl_card, text="  Component Specification Ledger",
+            image=_ctk_icon("db", 15, "#22C55E"), compound="left",
+            font=ctk.CTkFont(size=13, weight="bold"), text_color=PALETTE["text"]
+        ).grid(row=0, column=0, columnspan=2, sticky="w", padx=14, pady=(10, 4))
 
         cols = ("id", "component_name", "category", "specification", "qty", "source_notes", "inspection")
         self.tree = ttk.Treeview(tbl_card, columns=cols, show="headings", style="Eco.Treeview")
         for c, w in zip(cols, (45, 220, 95, 270, 50, 180, 85)):
             self.tree.heading(c, text=c.upper())
             self.tree.column(c, width=w, anchor="center" if c in ("id", "qty", "inspection") else "w")
-        self.tree.grid(row=0, column=0, sticky="nsew", padx=(10, 0), pady=10)
+        self.tree.grid(row=1, column=0, sticky="nsew", padx=(10, 0), pady=(2, 10))
         sb = ctk.CTkScrollbar(tbl_card, command=self.tree.yview)
-        sb.grid(row=0, column=1, sticky="ns", padx=(2, 8), pady=10)
+        sb.grid(row=1, column=1, sticky="ns", padx=(2, 8), pady=(2, 10))
         self.tree.configure(yscrollcommand=sb.set)
         self.tree.bind("<<TreeviewSelect>>", self._on_select)
 
@@ -900,7 +1054,7 @@ class TimeAnalyticsView(ctk.CTkFrame):
         # Top Battery Ring + Cadence/Cap side-by-side
         ring_row = ctk.CTkFrame(load_card, fg_color="transparent")
         ring_row.pack(fill="x", padx=12, pady=2)
-        self.batt_ring = BatteryRingCanvas(ring_row, mode="Light")
+        self.batt_ring = BatteryRingCanvas(ring_row, mode="Dark")
         self.batt_ring.pack(side="left", padx=(0, 8))
 
         cap_col = ctk.CTkFrame(ring_row, fg_color="transparent")
@@ -918,7 +1072,10 @@ class TimeAnalyticsView(ctk.CTkFrame):
         usb_box = ctk.CTkFrame(load_card, fg_color=PALETTE["card_soft"], corner_radius=10)
         usb_box.pack(fill="x", padx=14, pady=4)
         ctk.CTkLabel(usb_box, text="5V USB Phone Chargers (2.5 W / phone)", font=ctk.CTkFont(size=11, weight="bold"), text_color=PALETTE["text"]).pack(anchor="w", padx=10, pady=(8, 4))
-        self.usb_seg = ctk.CTkSegmentedButton(usb_box, values=["0", "1", "2", "3", "4"], command=self._on_usb_change, selected_color=PALETTE["green"])
+        self.usb_seg = ctk.CTkSegmentedButton(
+            usb_box, values=["0", "1", "2", "3", "4"], command=self._on_usb_change,
+            fg_color=PALETTE["card"], selected_color=PALETTE["green"], unselected_color=PALETTE["card"], text_color=PALETTE["text"]
+        )
         self.usb_seg.set("0")
         self.usb_seg.pack(fill="x", padx=10, pady=(0, 8))
 
@@ -926,7 +1083,10 @@ class TimeAnalyticsView(ctk.CTkFrame):
         sw_box.pack(fill="x", padx=14, pady=4)
         self.led12_sw = ctk.CTkSwitch(sw_box, text="12V Campus Pathway LED (3.0 W)", text_color=PALETTE["text"], progress_color=PALETTE["amber"], command=self._on_loads_update)
         self.led12_sw.pack(anchor="w", padx=10, pady=(8, 4))
-        self.sign_seg = ctk.CTkSegmentedButton(sw_box, values=["Dim (10kΩ)", "Full (1.5kΩ)"], command=self._on_sign_change, selected_color=PALETTE["amber"])
+        self.sign_seg = ctk.CTkSegmentedButton(
+            sw_box, values=["Dim (10kΩ)", "Full (1.5kΩ)"], command=self._on_sign_change,
+            fg_color=PALETTE["card"], selected_color=PALETTE["amber"], unselected_color=PALETTE["card"], text_color=PALETTE["text"]
+        )
         self.sign_seg.set("Dim (10kΩ)")
         self.sign_seg.pack(fill="x", padx=10, pady=(2, 8))
 
