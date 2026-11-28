@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS components (
     quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
     source_notes VARCHAR(255),
     inspection_status VARCHAR(50) NOT NULL DEFAULT 'Pending',
+    sia_synced BOOLEAN NOT NULL DEFAULT FALSE,
     last_updated TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
@@ -23,7 +24,11 @@ CREATE TABLE IF NOT EXISTS measurement_runs (
     adc_peak_volts NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
     charging_path VARCHAR(20) NOT NULL DEFAULT 'Path A',
     status VARCHAR(50) NOT NULL DEFAULT 'Pending',
-    is_deleted BOOLEAN NOT NULL DEFAULT FALSE
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    sia_run_id VARCHAR(64),
+    sia_synced BOOLEAN NOT NULL DEFAULT FALSE,
+    sia_synced_at TIMESTAMP,
+    sia_deleted_synced BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 CREATE TABLE IF NOT EXISTS telemetry_logs (
@@ -33,7 +38,8 @@ CREATE TABLE IF NOT EXISTS telemetry_logs (
     adc_raw INTEGER NOT NULL CHECK (adc_raw >= 0 AND adc_raw <= 1023),
     adc_voltage NUMERIC(10, 2) NOT NULL,
     baud_rate INTEGER NOT NULL DEFAULT 115200,
-    recorded_at TIMESTAMP NOT NULL DEFAULT NOW()
+    recorded_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    sia_synced BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_run_id ON telemetry_logs(run_id);
@@ -49,6 +55,7 @@ CREATE TABLE IF NOT EXISTS sign_tests (
     runtime_minutes NUMERIC(10, 2) NOT NULL CHECK (runtime_minutes >= 0),
     status VARCHAR(50) NOT NULL DEFAULT 'Completed',
     is_available BOOLEAN NOT NULL DEFAULT TRUE,
+    sia_synced BOOLEAN NOT NULL DEFAULT FALSE,
     last_updated TIMESTAMP NOT NULL DEFAULT NOW()
 );
 

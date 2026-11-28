@@ -3,6 +3,7 @@
 from collections import deque
 import os
 import queue
+import threading
 import tkinter as tk
 from tkinter import ttk
 import customtkinter as ctk
@@ -13,6 +14,7 @@ from PIL import ImageTk
 from . import analytics, config
 from .db import EcoStepDatabase
 from .serial_worker import SerialTelemetryWorker, list_serial_ports
+from .sia_sync import SiaBridgeSyncService
 from .theme import (
     PALETTE,
     apply_matplotlib_theme,
@@ -103,6 +105,146 @@ class PostgresSetupDialog(ctk.CTkToplevel):
             self.err_lbl.configure(text=f"Connection failed: {err}")
 
 
+class SiaBridgeSetupDialog(ctk.CTkToplevel):
+    """Modal dialog to configure SIA101 Web App (Render / localhost) XML bridge settings."""
+
+    def __init__(self, master, sia_sync, on_saved):
+        super().__init__(master)
+        self.sia_sync = sia_sync
+        self.on_saved = on_saved
+        self.title("Connect to SIA101 Web Bridge (Render / Flask)")
+        self.geometry("480x420")
+        self.resizable(False, False)
+        self.configure(fg_color=PALETTE["card"])
+        self.transient(master)
+        self.grab_set()
+
+        cfg = sia_sync.cfg
+        ctk.CTkLabel(
+            self,
+            text="SIA101 Web App XML Bridge Setup",
+            font=ctk.CTkFont(size=16, weight="bold"),
+            text_color=PALETTE["text"],
+        ).pack(pady=(16, 4))
+        ctk.CTkLabel(
+            self,
+            text="Sync local PostgreSQL telemetry to your live Render web dashboard (zero PII).",
+            font=ctk.CTkFont(size=12),
+            text_color=PALETTE["muted"],
+        ).pack(pady=(0, 12))
+
+        frm = ctk.CTkFrame(self, fg_color="transparent")
+        frm.pack(fill="x", padx=26)
+
+        self.url_e = self._field(frm, "Bridge URL", cfg.get("bridge_url", ""), placeholder="https://your-app.onrender.com")
+        self.key_e = self._field(frm, "API Key", cfg.get("api_key", ""), placeholder="EQC_API_KEY from Render", show="*")
+        self.tile_e = self._field(frm, "Tile ID", cfg.get("tile_id", "TILE-01"), placeholder="TILE-01")
+        self.interval_e = self._field(frm, "Sync (sec)", str(cfg.get("sync_interval", 15)), placeholder="15")
+
+        opts = ctk.CTkFrame(self, fg_color="transparent")
+        opts.pack(fill="x", padx=26, pady=(6, 4))
+        self.show_key_var = ctk.BooleanVar(value=False)
+        ctk.CTkCheckBox(
+            opts, text="Show API Key", variable=self.show_key_var,
+            text_color=PALETTE["muted"], command=self._toggle_key_vis
+        ).pack(side="left")
+
+        self.auto_sync_var = ctk.BooleanVar(value=bool(cfg.get("auto_sync", True)))
+        ctk.CTkCheckBox(
+            opts, text="Auto-sync in background", variable=self.auto_sync_var,
+            text_color=PALETTE["text"]
+        ).pack(side="right")
+
+        self.save_env_var = ctk.BooleanVar(value=True)
+        ctk.CTkCheckBox(
+            self, text="Save SIA bridge settings locally in .env",
+            variable=self.save_env_var, text_color=PALETTE["text"]
+        ).pack(pady=(4, 6))
+
+        self.status_lbl = ctk.CTkLabel(
+            self, text="", text_color=PALETTE["muted"], wraplength=420, font=ctk.CTkFont(size=11)
+        )
+        self.status_lbl.pack(pady=(2, 8))
+
+        btns = ctk.CTkFrame(self, fg_color="transparent")
+        btns.pack(pady=(2, 14))
+        self.test_btn = ctk.CTkButton(
+            btns, text="Test Connection", width=150,
+            fg_color=PALETTE["card_soft"], hover_color=PALETTE["sidebar_hover"],
+            border_width=1, border_color=PALETTE["border"], text_color=PALETTE["text"],
+            font=ctk.CTkFont(weight="bold"), command=self._test_connection
+        )
+        self.test_btn.pack(side="left", padx=(0, 10))
+        ctk.CTkButton(
+            btns, text="Save & Sync Now", width=160,
+            fg_color=PALETTE["green"], hover_color=PALETTE["green_bright"],
+            font=ctk.CTkFont(weight="bold"), command=self._save
+        ).pack(side="left")
+
+    def _field(self, parent, label, default, placeholder="", show=None):
+        row = ctk.CTkFrame(parent, fg_color="transparent")
+        row.pack(fill="x", pady=4)
+        ctk.CTkLabel(row, text=label, width=90, anchor="w", text_color=PALETTE["text"]).pack(side="left")
+        ent = styled_entry(row, placeholder=placeholder)
+        if show:
+            ent.configure(show=show)
+        if default:
+            ent.insert(0, default)
+        ent.pack(side="right", fill="x", expand=True)
+        return ent
+
+    def _toggle_key_vis(self):
+        self.key_e.configure(show="" if self.show_key_var.get() else "*")
+
+    def _test_connection(self):
+        url = self.url_e.get().strip()
+        key = self.key_e.get().strip()
+        self.test_btn.configure(state="disabled", text="Testing...")
+        self.status_lbl.configure(
+            text="Pinging SIA bridge (Render free tier may take ~20-35s on cold start)...",
+            text_color=PALETTE["amber"],
+        )
+
+        def _worker():
+            ok, msg = self.sia_sync.test_connection(bridge_url=url, api_key=key)
+
+            def _finish():
+                if not self.winfo_exists():
+                    return
+                self.test_btn.configure(state="normal", text="Test Connection")
+                self.status_lbl.configure(
+                    text=msg,
+                    text_color=PALETTE["green_bright"] if ok else PALETTE["danger"],
+                )
+
+            self.after(0, _finish)
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _save(self):
+        url = self.url_e.get().strip().rstrip("/")
+        key = self.key_e.get().strip()
+        tile = self.tile_e.get().strip() or "TILE-01"
+        try:
+            interval = max(5, min(300, int(self.interval_e.get().strip() or "15")))
+        except ValueError:
+            interval = 15
+        auto_sync = bool(self.auto_sync_var.get())
+
+        if url and not url.startswith(("http://", "https://")):
+            self.status_lbl.configure(
+                text="Bridge URL must start with http:// or https://.",
+                text_color=PALETTE["danger"],
+            )
+            return
+
+        self.sia_sync.update_config(url, key, tile_id=tile, auto_sync=auto_sync, sync_interval=interval)
+        if self.save_env_var.get():
+            config.save_sia_config(url, key, tile_id=tile, auto_sync=auto_sync, sync_interval=interval)
+        self.on_saved()
+        self.destroy()
+
+
 class EcoStepApp(ctk.CTk):
     def __init__(self):
         super().__init__()
@@ -123,8 +265,15 @@ class EcoStepApp(ctk.CTk):
 
         self.db = EcoStepDatabase()
         self.serial_q = queue.Queue(maxsize=256)
+        self.sia_q = queue.Queue(maxsize=128)
         self.worker = SerialTelemetryWorker(self.serial_q)
+        self.sia_sync = SiaBridgeSyncService(
+            self.db,
+            event_queue=self.sia_q,
+            get_sign_mode=self._get_current_sign_mode,
+        )
         self.active_run_id = None
+        self._sia_sync_debounce_id = None
 
         self.wave_x = deque(maxlen=40)
         self.wave_v = deque(maxlen=40)
@@ -141,9 +290,14 @@ class EcoStepApp(ctk.CTk):
         self._build_icons()
         self._build_layout()
         self._init_database_on_boot()
+        self.sia_sync.start()
         self.after(80, self._poll_serial_queue)
         self.after(180, self._tick_meter_pulse)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _get_current_sign_mode(self):
+        time_tab = getattr(self, "tabs", {}).get("time")
+        return getattr(time_tab, "sign_mode", "Dim") if time_tab else "Dim"
 
     def _build_icons(self):
         specs = {
@@ -174,19 +328,19 @@ class EcoStepApp(ctk.CTk):
         self.sidebar.grid_propagate(False)
 
         brand = ctk.CTkFrame(self.sidebar, fg_color="transparent")
-        brand.pack(fill="x", padx=16, pady=(18, 10))
+        brand.pack(fill="x", padx=16, pady=(14, 6))
         if os.path.exists(config.LOGO_PATH):
-            circ_logo = make_circular_logo(config.LOGO_PATH, size=56)
-            logo_img = ctk.CTkImage(light_image=circ_logo, dark_image=circ_logo, size=(56, 56))
-            ctk.CTkLabel(brand, image=logo_img, text="").pack(side="left", padx=(0, 12))
+            circ_logo = make_circular_logo(config.LOGO_PATH, size=50)
+            logo_img = ctk.CTkImage(light_image=circ_logo, dark_image=circ_logo, size=(50, 50))
+            ctk.CTkLabel(brand, image=logo_img, text="").pack(side="left", padx=(0, 10))
         tbox = ctk.CTkFrame(brand, fg_color="transparent")
         tbox.pack(side="left", fill="x")
-        ctk.CTkLabel(tbox, text="ECOSTEP QCU", font=ctk.CTkFont(size=18, weight="bold"), text_color="#FFFFFF").pack(anchor="w")
+        ctk.CTkLabel(tbox, text="ECOSTEP QCU", font=ctk.CTkFont(size=17, weight="bold"), text_color="#FFFFFF").pack(anchor="w")
         ctk.CTkLabel(tbox, text="Recycled Kinetic Mat", font=ctk.CTkFont(size=11, weight="bold"), text_color=PALETTE["gold"]).pack(anchor="w")
-        ctk.CTkLabel(tbox, text="IPT2 Telemetry Suite", font=ctk.CTkFont(size=10), text_color="#94BD9A").pack(anchor="w")
+        ctk.CTkLabel(tbox, text="IPT2 + SIA101 Suite", font=ctk.CTkFont(size=10), text_color="#94BD9A").pack(anchor="w")
 
-        ctk.CTkFrame(self.sidebar, height=1, fg_color="#1A3826").pack(fill="x", padx=16, pady=(4, 10))
-        ctk.CTkLabel(self.sidebar, text="NAVIGATION", font=ctk.CTkFont(size=10, weight="bold"), text_color="#7AA384").pack(anchor="w", padx=18, pady=(0, 4))
+        ctk.CTkFrame(self.sidebar, height=1, fg_color="#1A3826").pack(fill="x", padx=16, pady=(2, 6))
+        ctk.CTkLabel(self.sidebar, text="NAVIGATION", font=ctk.CTkFont(size=10, weight="bold"), text_color="#7AA384").pack(anchor="w", padx=18, pady=(0, 2))
 
         self.nav_btns = {}
         nav_items = [
@@ -203,7 +357,7 @@ class EcoStepApp(ctk.CTk):
                 image=self._icons[key],
                 compound="left",
                 anchor="w",
-                height=38,
+                height=34,
                 corner_radius=10,
                 border_width=0,
                 border_color="#4ADE80",
@@ -213,46 +367,69 @@ class EcoStepApp(ctk.CTk):
                 font=ctk.CTkFont(size=13, weight="bold"),
                 command=lambda k=key: self.show_tab(k),
             )
-            b.pack(fill="x", padx=14, pady=3)
+            b.pack(fill="x", padx=14, pady=2)
             self.nav_btns[key] = b
 
         # USB-C Serial Box
         ser_box = ctk.CTkFrame(self.sidebar, fg_color=PALETTE["sidebar_card"], corner_radius=12, border_width=1, border_color="#1C3A28")
-        ser_box.pack(fill="x", padx=14, pady=(14, 8))
-        ctk.CTkLabel(ser_box, text="USB-C SERIAL (115,200)", font=ctk.CTkFont(size=10, weight="bold"), text_color="#8CB999").pack(anchor="w", padx=12, pady=(10, 4))
+        ser_box.pack(fill="x", padx=14, pady=(8, 4))
+        ctk.CTkLabel(ser_box, text="USB-C SERIAL (115,200)", font=ctk.CTkFont(size=10, weight="bold"), text_color="#8CB999").pack(anchor="w", padx=12, pady=(8, 2))
 
         self.port_var = ctk.StringVar(value=config.DEFAULT_SERIAL_PORT)
         self.port_menu = styled_option(ser_box, self.port_var, list_serial_ports())
-        self.port_menu.configure(fg_color="#12271B", button_color="#1C3D2A", button_hover_color=PALETTE["green"], text_color="#EBF7EE")
-        self.port_menu.pack(fill="x", padx=12, pady=4)
+        self.port_menu.configure(height=28, fg_color="#12271B", button_color="#1C3D2A", button_hover_color=PALETTE["green"], text_color="#EBF7EE")
+        self.port_menu.pack(fill="x", padx=12, pady=3)
 
         self.connect_btn = ctk.CTkButton(
             ser_box, text="Connect Telemetry", image=self._icons["usb"], compound="left",
-            fg_color=PALETTE["green_bright"], hover_color="#16A34A", text_color="#06140C",
+            height=29, fg_color=PALETTE["green_bright"], hover_color="#16A34A", text_color="#06140C",
             font=ctk.CTkFont(weight="bold"), command=self._toggle_serial
         )
-        self.connect_btn.pack(fill="x", padx=12, pady=(4, 6))
+        self.connect_btn.pack(fill="x", padx=12, pady=(3, 4))
 
         self.serial_status_lbl = ctk.CTkLabel(ser_box, text="● Disconnected", font=ctk.CTkFont(size=11, weight="bold"), text_color=PALETTE["amber"])
-        self.serial_status_lbl.pack(anchor="w", padx=12, pady=(0, 10))
+        self.serial_status_lbl.pack(anchor="w", padx=12, pady=(0, 8))
 
         # PostgreSQL Status Box
         db_box = ctk.CTkFrame(self.sidebar, fg_color=PALETTE["sidebar_card"], corner_radius=12, border_width=1, border_color="#1C3A28")
-        db_box.pack(fill="x", padx=14, pady=6)
-        ctk.CTkLabel(db_box, text="POSTGRESQL DB (3NF)", font=ctk.CTkFont(size=10, weight="bold"), text_color="#8CB999").pack(anchor="w", padx=12, pady=(10, 2))
+        db_box.pack(fill="x", padx=14, pady=4)
+        ctk.CTkLabel(db_box, text="POSTGRESQL DB (3NF)", font=ctk.CTkFont(size=10, weight="bold"), text_color="#8CB999").pack(anchor="w", padx=12, pady=(8, 2))
         self.db_status_lbl = ctk.CTkLabel(db_box, text="● Checking...", font=ctk.CTkFont(size=11, weight="bold"), text_color="#E8F5E4")
-        self.db_status_lbl.pack(anchor="w", padx=12, pady=(0, 6))
+        self.db_status_lbl.pack(anchor="w", padx=12, pady=(0, 4))
         ctk.CTkButton(
             db_box, text="DB Connection Setup", image=self._icons["db"], compound="left",
-            height=29, fg_color="#152E20", hover_color="#1F422E", border_width=1, border_color="#244E36",
+            height=28, fg_color="#152E20", hover_color="#1F422E", border_width=1, border_color="#244E36",
             command=self.open_pg_dialog
-        ).pack(fill="x", padx=12, pady=(0, 10))
+        ).pack(fill="x", padx=12, pady=(0, 8))
+
+        # SIA101 Web Bridge Box
+        sia_box = ctk.CTkFrame(self.sidebar, fg_color=PALETTE["sidebar_card"], corner_radius=12, border_width=1, border_color="#1C3A28")
+        sia_box.pack(fill="x", padx=14, pady=4)
+        ctk.CTkLabel(sia_box, text="SIA WEB BRIDGE (XML)", font=ctk.CTkFont(size=10, weight="bold"), text_color="#8CB999").pack(anchor="w", padx=12, pady=(8, 2))
+        init_sia_txt = "● Ready to Sync" if self.sia_sync.is_configured else "● Not Configured"
+        init_sia_col = PALETTE["teal"] if self.sia_sync.is_configured else PALETTE["amber"]
+        self.sia_status_lbl = ctk.CTkLabel(sia_box, text=init_sia_txt, font=ctk.CTkFont(size=11, weight="bold"), text_color=init_sia_col)
+        self.sia_status_lbl.pack(anchor="w", padx=12, pady=(0, 4))
+        sia_btns = ctk.CTkFrame(sia_box, fg_color="transparent")
+        sia_btns.pack(fill="x", padx=12, pady=(0, 8))
+        ctk.CTkButton(
+            sia_btns, text="Sync Now", height=27,
+            fg_color=PALETTE["green"], hover_color=PALETTE["green_bright"], text_color="#FFFFFF",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            command=lambda: self.trigger_sia_sync(immediate=True),
+        ).pack(side="left", expand=True, fill="x", padx=(0, 4))
+        ctk.CTkButton(
+            sia_btns, text="Setup", height=27, width=72,
+            fg_color="#152E20", hover_color="#1F422E", border_width=1, border_color="#244E36",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            command=self.open_sia_dialog,
+        ).pack(side="right")
 
         self.active_run_lbl = ctk.CTkLabel(self.sidebar, text="Active Run: None", font=ctk.CTkFont(size=11, weight="bold"), text_color=PALETTE["gold"])
-        self.active_run_lbl.pack(anchor="w", padx=18, pady=(6, 4))
+        self.active_run_lbl.pack(anchor="w", padx=18, pady=(4, 2))
 
         # Subtle aurora wave footer inside sidebar
-        self.sb_footer = tk.Canvas(self.sidebar, height=64, highlightthickness=0, bd=0, bg=pick(PALETTE["sidebar_bg"], "Dark"))
+        self.sb_footer = tk.Canvas(self.sidebar, height=52, highlightthickness=0, bd=0, bg=pick(PALETTE["sidebar_bg"], "Dark"))
         self.sb_footer.pack(side="bottom", fill="x")
         self.sb_footer.bind("<Configure>", self._draw_sidebar_footer)
 
@@ -263,7 +440,7 @@ class EcoStepApp(ctk.CTk):
             command=self._toggle_theme
         )
         self.theme_switch.select()
-        self.sb_switch_win = self.sb_footer.create_window(18, 32, anchor="w", window=self.theme_switch)
+        self.sb_switch_win = self.sb_footer.create_window(18, 26, anchor="w", window=self.theme_switch)
 
         # ---------------- MAIN WORKSPACE (AURORA TOP BANNER + CONTENT) ----------------
         right_shell = ctk.CTkFrame(self, fg_color="transparent")
@@ -556,7 +733,7 @@ class EcoStepApp(ctk.CTk):
             self.diag_drawer.log_event("err", "WARN", f"Cannot send '{cmd}': ESP32 is offline. Connect USB-C first.")
 
     def _on_quick_step(self):
-        # Send live step trigger to ESP32 if connected; otherwise run offline visual bench preview
+        # Send live step trigger to ESP32 if connected; otherwise run bench step & log to DB
         if self.worker.send_command("S"):
             return
         self.step_counter += 1
@@ -569,7 +746,13 @@ class EcoStepApp(ctk.CTk):
         self.wave_x.append(self.step_counter)
         self.wave_v.append(self.demo_volts)
         self._redraw_waveform()
-        self.diag_drawer.log_event("raw", "DEMO", f"DATA,{self.step_counter},{adc_raw},{self.demo_volts:.2f} (offline bench preview)", count_rx=True)
+        if self.db.connected and self.active_run_id:
+            self.db.insert_telemetry_log(self.active_run_id, self.step_counter, adc_raw, self.demo_volts)
+            self.refresh_all()
+            self.trigger_sia_sync()
+            self.diag_drawer.log_event("raw", "BENCH", f"DATA,{self.step_counter},{adc_raw},{self.demo_volts:.2f} (logged to PG & queued for SIA)", count_rx=True)
+        else:
+            self.diag_drawer.log_event("raw", "DEMO", f"DATA,{self.step_counter},{adc_raw},{self.demo_volts:.2f} (offline bench preview)", count_rx=True)
 
     def _init_database_on_boot(self):
         ok, err = self.db.ensure_initialized()
@@ -581,6 +764,37 @@ class EcoStepApp(ctk.CTk):
 
     def open_pg_dialog(self):
         PostgresSetupDialog(self, self.db, self._on_db_ready)
+
+    def open_sia_dialog(self):
+        SiaBridgeSetupDialog(self, self.sia_sync, self._on_sia_saved)
+
+    def _on_sia_saved(self):
+        if self.sia_sync.is_configured:
+            self.sia_status_lbl.configure(text="● Syncing...", text_color=PALETTE["teal"])
+            self.trigger_sia_sync(immediate=True)
+        else:
+            self.sia_status_lbl.configure(text="● Not Configured", text_color=PALETTE["amber"])
+
+    def trigger_sia_sync(self, immediate=False):
+        if not self.sia_sync.is_configured:
+            if immediate:
+                self.open_sia_dialog()
+            return
+        if self._sia_sync_debounce_id is not None:
+            try:
+                self.after_cancel(self._sia_sync_debounce_id)
+            except Exception:
+                pass
+            self._sia_sync_debounce_id = None
+        if immediate:
+            self.sia_sync.trigger_sync()
+        else:
+            # Batch rapid footsteps for 1.5s before sending one clean XML run
+            self._sia_sync_debounce_id = self.after(1500, self._flush_debounced_sia_sync)
+
+    def _flush_debounced_sia_sync(self):
+        self._sia_sync_debounce_id = None
+        self.sia_sync.trigger_sync()
 
     def _on_db_ready(self):
         self.db_status_lbl.configure(text=f"● {self.db.cfg['dbname']}", text_color="#4ADE80")
@@ -601,6 +815,8 @@ class EcoStepApp(ctk.CTk):
             self.active_run_id = runs[0]["run_id"]
         self.refresh_active_run_label()
         self.refresh_all()
+        if self.sia_sync.is_configured:
+            self.trigger_sia_sync(immediate=True)
 
     def refresh_active_run_label(self):
         txt = f"Active Run: #{self.active_run_id}" if self.active_run_id else "Active Run: None"
@@ -689,6 +905,27 @@ class EcoStepApp(ctk.CTk):
 
         if updated:
             self.refresh_all()
+            self.trigger_sia_sync()
+
+        while True:
+            try:
+                sevt = self.sia_q.get_nowait()
+            except queue.Empty:
+                break
+            st = sevt.get("status", "unconfigured")
+            msg = sevt.get("message", "")
+            color_map = {
+                "synced": "#4ADE80",
+                "syncing": PALETTE["teal"],
+                "offline": PALETTE["amber"],
+                "unconfigured": PALETTE["amber"],
+                "auth_error": "#FCA5A5",
+                "error": "#FCA5A5",
+            }
+            self.sia_status_lbl.configure(text=f"● {msg}", text_color=color_map.get(st, "#E8F5E4"))
+            if sevt.get("detail"):
+                self.diag_drawer.log_event(sevt.get("log_tag", "info"), "SIA", sevt["detail"])
+
         self.after(80, self._poll_serial_queue)
 
     def _tick_meter_pulse(self):
@@ -772,6 +1009,7 @@ class EcoStepApp(ctk.CTk):
         self.tabs["components"].refresh()
 
     def _on_close(self):
+        self.sia_sync.stop()
         self.worker.disconnect()
         self.destroy()
 

@@ -49,3 +49,9 @@ mpremote connect COM10 sleep 1.5 cp esp32_micropython\boot.py :boot.py + cp esp3
 python -m ecostep_app.app
 ```
 On first launch, enter your local PostgreSQL credentials in the **DB Connection Setup** dialog (it automatically creates `ecostep_qcu_db`, applies `schema.sql`, and seeds default components). Select your ESP32 `COM` port in the sidebar and click **Connect Telemetry**.
+
+### 5. Connect to the SIA101 Web Dashboard (Render / Flask XML Bridge)
+1. Click **Setup** inside the sidebar's **SIA WEB BRIDGE (XML)** card (or copy `.env.example` to `.env`).
+2. Enter your deployed SIA web app URL (e.g. `https://<your-app>.onrender.com`) and your `EQC_API_KEY`.
+3. Click **Test Connection** to verify reachability and API key auth, then click **Save & Sync Now**.
+4. All benchmark runs, live ESP32/Quick-Step batches, 5V sign tests, and component inspections save locally in PostgreSQL first and sync automatically in the background as XSD-validated XML (stripping `operator_name` for privacy). If Wi-Fi drops, unsynced rows stay safely queued and retry automatically.

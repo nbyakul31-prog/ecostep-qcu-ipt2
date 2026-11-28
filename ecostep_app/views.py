@@ -709,6 +709,7 @@ class MeasurementRunsView(ctk.CTkFrame):
             )
             self.app.active_run_id = row["run_id"]
             self.app.refresh_all()
+            self.app.trigger_sia_sync(immediate=True)
         except Exception as exc:
             messagebox.showerror("Validation Error", str(exc))
 
@@ -728,6 +729,7 @@ class MeasurementRunsView(ctk.CTkFrame):
                 status=self.status_var.get(),
             )
             self.app.refresh_all()
+            self.app.trigger_sia_sync(immediate=True)
         except Exception as exc:
             messagebox.showerror("Error", str(exc))
 
@@ -736,6 +738,7 @@ class MeasurementRunsView(ctk.CTkFrame):
             return
         self.app.db.soft_delete_run(self.selected_run_id, deleted=flag)
         self.app.refresh_all()
+        self.app.trigger_sia_sync(immediate=True)
 
     def _set_active(self):
         if not self.selected_run_id:
@@ -936,6 +939,7 @@ class SignTestsView(ctk.CTkFrame):
                 is_available=self.avail_var.get(),
             )
             self.app.refresh_all()
+            self.app.trigger_sia_sync(immediate=True)
         except Exception as exc:
             messagebox.showerror("Validation Error", str(exc))
 
@@ -952,15 +956,18 @@ class SignTestsView(ctk.CTkFrame):
                 is_available=self.avail_var.get(),
             )
             self.app.refresh_all()
+            self.app.trigger_sia_sync(immediate=True)
         except Exception as exc:
             messagebox.showerror("Error", str(exc))
 
     def _delete_test(self):
         if not self.selected_test_id:
             return
-        self.app.db.delete_sign_test(self.selected_test_id)
+        tid = self.selected_test_id
+        self.app.db.delete_sign_test(tid)
         self.selected_test_id = None
         self.app.refresh_all()
+        self.app.sia_sync.delete_remote_sign_test_async(tid)
 
     def _on_select(self, _evt):
         sel = self.tree.selection()
@@ -1089,6 +1096,7 @@ class ComponentsView(ctk.CTkFrame):
                 int(self.qty_entry.get()), self.source_entry.get(), self.insp_var.get(),
             )
             self.app.refresh_all()
+            self.app.trigger_sia_sync(immediate=True)
         except Exception as exc:
             messagebox.showerror("Validation Error", str(exc))
 
@@ -1102,6 +1110,7 @@ class ComponentsView(ctk.CTkFrame):
                 self.source_entry.get(), self.insp_var.get(),
             )
             self.app.refresh_all()
+            self.app.trigger_sia_sync(immediate=True)
         except Exception as exc:
             messagebox.showerror("Error", str(exc))
 
@@ -1109,9 +1118,11 @@ class ComponentsView(ctk.CTkFrame):
         if not self.selected_comp_id:
             return
         try:
-            self.app.db.delete_component(self.selected_comp_id)
+            cid = self.selected_comp_id
+            self.app.db.delete_component(cid)
             self.selected_comp_id = None
             self.app.refresh_all()
+            self.app.sia_sync.delete_remote_component_async(cid)
         except Exception as exc:
             messagebox.showerror("Cannot Delete", f"Component is referenced by existing runs.\n{exc}")
 
@@ -1362,13 +1373,16 @@ class TimeAnalyticsView(ctk.CTkFrame):
             return messagebox.showwarning("PostgreSQL Offline", "Connect to PostgreSQL first.")
         cnt = self.app.db.seed_demo_7d()
         self.app.refresh_all()
+        self.app.trigger_sia_sync(immediate=True)
         messagebox.showinfo("7-Day Demo Seeded", f"Inserted {cnt} realistic QCU campus step entries across 7 days.")
 
     def _clear_demo(self):
         if not self.app.db.connected:
             return
+        demo_ids = self.app.db.list_demo_sia_run_ids()
         deleted = self.app.db.clear_demo_data()
         self.app.refresh_all()
+        self.app.sia_sync.delete_remote_runs_async(demo_ids)
         messagebox.showinfo("Demo Cleared", f"Removed {deleted} 'Demo Shift Sim' runs.")
 
     def refresh(self):

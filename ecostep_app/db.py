@@ -7,6 +7,7 @@ import random
 import subprocess
 import threading
 import time
+import uuid
 from datetime import datetime, timedelta
 
 import psycopg2
@@ -87,14 +88,27 @@ class EcoStepDatabase:
             cursor_factory=RealDictCursor,
         )
 
+    @staticmethod
+    def _find_pg_ctl():
+        candidates = [
+            r"C:\Program Files\PostgreSQL\18\bin\pg_ctl.exe",
+            r"C:\Program Files\PostgreSQL\17\bin\pg_ctl.exe",
+            r"C:\Program Files\PostgreSQL\16\bin\pg_ctl.exe",
+            os.path.join(config.APP_DIR, "pgsql", "bin", "pg_ctl.exe"),
+        ]
+        for path in candidates:
+            if os.path.isfile(path):
+                return path
+        return None
+
     def _maybe_start_local_cluster(self):
-        """Starts the workspace-local PostgreSQL 18 cluster on port 5433 if stopped."""
+        """Starts the workspace-local PostgreSQL cluster on port 5433 if stopped."""
         if self.cfg["host"] not in ("127.0.0.1", "localhost") or int(self.cfg["port"]) != 5433:
             return
         data_dir = os.path.join(config.APP_DIR, "pgdata")
         log_file = os.path.join(config.APP_DIR, "postgres.log")
-        pg_ctl = r"C:\Program Files\PostgreSQL\18\bin\pg_ctl.exe"
-        if not (os.path.isdir(data_dir) and os.path.isfile(pg_ctl)):
+        pg_ctl = self._find_pg_ctl()
+        if not (os.path.isdir(data_dir) and pg_ctl):
             return
         # Remove stale log inside pgdata if present from earlier setup
         old_log = os.path.join(data_dir, "postgres.log")
@@ -117,12 +131,12 @@ class EcoStepDatabase:
             pass
 
     def stop_local_cluster(self):
-        """Cleanly shuts down the workspace-local PostgreSQL 18 cluster if running."""
+        """Cleanly shuts down the workspace-local PostgreSQL cluster if running."""
         if self.cfg["host"] not in ("127.0.0.1", "localhost") or int(self.cfg["port"]) != 5433:
             return
         data_dir = os.path.join(config.APP_DIR, "pgdata")
-        pg_ctl = r"C:\Program Files\PostgreSQL\18\bin\pg_ctl.exe"
-        if not (os.path.isdir(data_dir) and os.path.isfile(pg_ctl)):
+        pg_ctl = self._find_pg_ctl()
+        if not (os.path.isdir(data_dir) and pg_ctl):
             return
         try:
             flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -179,6 +193,7 @@ class EcoStepDatabase:
                 try:
                     with conn.cursor() as cur:
                         cur.execute(ddl)
+                        self._ensure_sia_sync_columns(cur)
                         cur.execute("SELECT COUNT(*) AS cnt FROM components;")
                         if cur.fetchone()["cnt"] == 0:
                             cur.executemany(
@@ -201,6 +216,33 @@ class EcoStepDatabase:
                 self.connected = False
                 self.last_error = str(exc).strip()
                 return False, self.last_error
+
+    @staticmethod
+    def _ensure_sia_sync_columns(cur):
+        """Non-destructively migrate existing IPT2 databases with SIA101 sync columns."""
+        migrations = (
+            "ALTER TABLE components ADD COLUMN IF NOT EXISTS sia_synced BOOLEAN NOT NULL DEFAULT FALSE;",
+            "ALTER TABLE measurement_runs ADD COLUMN IF NOT EXISTS sia_run_id VARCHAR(64);",
+            "ALTER TABLE measurement_runs ADD COLUMN IF NOT EXISTS sia_synced BOOLEAN NOT NULL DEFAULT FALSE;",
+            "ALTER TABLE measurement_runs ADD COLUMN IF NOT EXISTS sia_synced_at TIMESTAMP;",
+            "ALTER TABLE measurement_runs ADD COLUMN IF NOT EXISTS sia_deleted_synced BOOLEAN NOT NULL DEFAULT FALSE;",
+            "ALTER TABLE telemetry_logs ADD COLUMN IF NOT EXISTS sia_synced BOOLEAN NOT NULL DEFAULT FALSE;",
+            "ALTER TABLE sign_tests ADD COLUMN IF NOT EXISTS sia_synced BOOLEAN NOT NULL DEFAULT FALSE;",
+        )
+        for stmt in migrations:
+            cur.execute(stmt)
+        cur.execute(
+            """
+            UPDATE measurement_runs
+            SET sia_run_id = 'IPT2-RUN-' || LPAD(run_id::TEXT, 4, '0')
+            WHERE sia_run_id IS NULL;
+            """
+        )
+
+    @staticmethod
+    def _new_sia_run_id(prefix="IPT2"):
+        stamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        return f"{prefix}-{stamp}-{uuid.uuid4().hex[:6].upper()}"
 
     # ------------------------------------------------------------------
     # TABLE 1: COMPONENTS CRUD
@@ -264,6 +306,7 @@ class EcoStepDatabase:
                     quantity = %s,
                     source_notes = %s,
                     inspection_status = %s,
+                    sia_synced = FALSE,
                     last_updated = NOW()
                 WHERE component_id = %s
                 RETURNING *;
@@ -331,14 +374,15 @@ class EcoStepDatabase:
         status="Pending",
     ):
         joules, j_per_step = self.compute_run_metrics(energy_mwh, steps_count)
+        sia_run_id = self._new_sia_run_id("IPT2")
         with self._lock, self._connect() as conn, conn.cursor() as cur:
             cur.execute(
                 """
                 INSERT INTO measurement_runs (
                     component_id, operator_name, steps_count,
                     energy_mwh, energy_joules, joules_per_step,
-                    adc_peak_volts, charging_path, status
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    adc_peak_volts, charging_path, status, sia_run_id, sia_synced
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, FALSE)
                 RETURNING *;
                 """,
                 (
@@ -351,6 +395,7 @@ class EcoStepDatabase:
                     round(float(adc_peak_volts), 2),
                     charging_path,
                     status,
+                    sia_run_id,
                 ),
             )
             row = dict(cur.fetchone())
@@ -381,7 +426,8 @@ class EcoStepDatabase:
                     joules_per_step = %s,
                     adc_peak_volts = %s,
                     charging_path = %s,
-                    status = %s
+                    status = %s,
+                    sia_synced = FALSE
                 WHERE run_id = %s
                 RETURNING *;
                 """,
@@ -405,7 +451,13 @@ class EcoStepDatabase:
     def soft_delete_run(self, run_id, deleted=True):
         with self._lock, self._connect() as conn, conn.cursor() as cur:
             cur.execute(
-                "UPDATE measurement_runs SET is_deleted = %s WHERE run_id = %s;",
+                """
+                UPDATE measurement_runs
+                SET is_deleted = %s,
+                    sia_synced = FALSE,
+                    sia_deleted_synced = FALSE
+                WHERE run_id = %s;
+                """,
                 (bool(deleted), int(run_id)),
             )
             conn.commit()
@@ -548,6 +600,7 @@ class EcoStepDatabase:
                     runtime_minutes = %s,
                     status = %s,
                     is_available = %s,
+                    sia_synced = FALSE,
                     last_updated = NOW()
                 WHERE test_id = %s
                 RETURNING *;
@@ -762,11 +815,11 @@ class EcoStepDatabase:
                     INSERT INTO measurement_runs (
                         component_id, run_date, operator_name, steps_count,
                         energy_mwh, energy_joules, joules_per_step,
-                        adc_peak_volts, charging_path, status
-                    ) VALUES (%s, %s, 'Demo Shift Sim', %s, %s, %s, %s, %s, 'Path A', 'Completed')
+                        adc_peak_volts, charging_path, status, sia_run_id, sia_synced
+                    ) VALUES (%s, %s, 'Demo Shift Sim', %s, %s, %s, %s, %s, 'Path A', 'Completed', %s, FALSE)
                     RETURNING run_id;
                     """,
-                    (cid, day_dt, len(day_steps), mwh, total_j, jps, peak_v),
+                    (cid, day_dt, len(day_steps), mwh, total_j, jps, peak_v, self._new_sia_run_id("DEMO")),
                 )
                 rid = cur.fetchone()["run_id"]
                 log_rows = [
@@ -776,8 +829,8 @@ class EcoStepDatabase:
                 cur.executemany(
                     """
                     INSERT INTO telemetry_logs (
-                        run_id, step_number, adc_raw, adc_voltage, baud_rate, recorded_at
-                    ) VALUES (%s, %s, %s, %s, %s, %s);
+                        run_id, step_number, adc_raw, adc_voltage, baud_rate, recorded_at, sia_synced
+                    ) VALUES (%s, %s, %s, %s, %s, %s, TRUE);
                     """,
                     log_rows,
                 )
@@ -785,12 +838,165 @@ class EcoStepDatabase:
             conn.commit()
             return total_inserted
 
+    def list_demo_sia_run_ids(self):
+        with self._lock, self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT sia_run_id FROM measurement_runs WHERE operator_name = 'Demo Shift Sim' AND sia_run_id IS NOT NULL;"
+            )
+            return [r["sia_run_id"] for r in cur.fetchall()]
+
     def clear_demo_data(self):
         with self._lock, self._connect() as conn, conn.cursor() as cur:
             cur.execute("DELETE FROM measurement_runs WHERE operator_name = 'Demo Shift Sim';")
             deleted = cur.rowcount
             conn.commit()
             return deleted
+
+    # ------------------------------------------------------------------
+    # SIA101 WEB BRIDGE OFFLINE SYNC QUEUE HELPERS
+    # ------------------------------------------------------------------
+    def get_unsynced_runs(self):
+        with self._lock, self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT run_id, sia_run_id, run_date, steps_count, energy_mwh,
+                       energy_joules, adc_peak_volts, charging_path, status, sia_synced_at
+                FROM measurement_runs
+                WHERE is_deleted = FALSE
+                  AND sia_synced = FALSE
+                  AND sia_run_id IS NOT NULL
+                  AND (status != 'Pending' OR energy_joules > 0)
+                ORDER BY run_id ASC;
+                """
+            )
+            return [dict(r) for r in cur.fetchall()]
+
+    def get_pending_soft_deletes(self):
+        with self._lock, self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT run_id, sia_run_id
+                FROM measurement_runs
+                WHERE is_deleted = TRUE
+                  AND sia_deleted_synced = FALSE
+                  AND sia_run_id IS NOT NULL
+                ORDER BY run_id ASC;
+                """
+            )
+            return [dict(r) for r in cur.fetchall()]
+
+    def mark_run_synced(self, run_id, deleted_synced=False):
+        with self._lock, self._connect() as conn, conn.cursor() as cur:
+            if deleted_synced:
+                cur.execute(
+                    """
+                    UPDATE measurement_runs
+                    SET sia_synced = TRUE, sia_deleted_synced = TRUE, sia_synced_at = NOW()
+                    WHERE run_id = %s;
+                    """,
+                    (int(run_id),),
+                )
+            else:
+                cur.execute(
+                    """
+                    UPDATE measurement_runs
+                    SET sia_synced = TRUE, sia_synced_at = NOW()
+                    WHERE run_id = %s;
+                    """,
+                    (int(run_id),),
+                )
+            conn.commit()
+
+    def get_unsynced_live_logs(self, limit=250):
+        with self._lock, self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT t.log_id, t.run_id, t.step_number, t.adc_raw, t.adc_voltage,
+                       t.recorded_at, r.charging_path
+                FROM telemetry_logs t
+                JOIN measurement_runs r ON r.run_id = t.run_id
+                WHERE t.sia_synced = FALSE
+                  AND r.is_deleted = FALSE
+                  AND COALESCE(r.operator_name, '') != 'Demo Shift Sim'
+                ORDER BY t.log_id ASC
+                LIMIT %s;
+                """,
+                (int(limit),),
+            )
+            return [dict(r) for r in cur.fetchall()]
+
+    def mark_logs_synced(self, log_ids):
+        if not log_ids:
+            return
+        with self._lock, self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                "UPDATE telemetry_logs SET sia_synced = TRUE WHERE log_id = ANY(%s);",
+                ([int(i) for i in log_ids],),
+            )
+            conn.commit()
+
+    def get_unsynced_sign_tests(self):
+        with self._lock, self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT s.*, r.sia_run_id
+                FROM sign_tests s
+                JOIN measurement_runs r ON r.run_id = s.run_id
+                WHERE s.sia_synced = FALSE
+                ORDER BY s.test_id ASC;
+                """
+            )
+            return [dict(r) for r in cur.fetchall()]
+
+    def mark_sign_test_synced(self, test_id):
+        with self._lock, self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                "UPDATE sign_tests SET sia_synced = TRUE WHERE test_id = %s;",
+                (int(test_id),),
+            )
+            conn.commit()
+
+    def get_unsynced_components(self):
+        with self._lock, self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT component_id, component_name, category, specification,
+                       quantity, source_notes, inspection_status
+                FROM components
+                WHERE sia_synced = FALSE
+                ORDER BY component_id ASC;
+                """
+            )
+            return [dict(r) for r in cur.fetchall()]
+
+    def mark_component_synced(self, component_id):
+        with self._lock, self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                "UPDATE components SET sia_synced = TRUE WHERE component_id = %s;",
+                (int(component_id),),
+            )
+            conn.commit()
+
+    def get_pending_sync_count(self):
+        with self._lock, self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    (SELECT COUNT(*) FROM measurement_runs
+                     WHERE is_deleted = FALSE AND sia_synced = FALSE AND sia_run_id IS NOT NULL
+                       AND (status != 'Pending' OR energy_joules > 0))
+                    + (SELECT COUNT(*) FROM measurement_runs
+                       WHERE is_deleted = TRUE AND sia_deleted_synced = FALSE AND sia_run_id IS NOT NULL)
+                    + (SELECT COUNT(DISTINCT t.run_id) FROM telemetry_logs t
+                       JOIN measurement_runs r ON r.run_id = t.run_id
+                       WHERE t.sia_synced = FALSE AND r.is_deleted = FALSE
+                         AND COALESCE(r.operator_name, '') != 'Demo Shift Sim')
+                    + (SELECT COUNT(*) FROM sign_tests WHERE sia_synced = FALSE)
+                    + (SELECT COUNT(*) FROM components WHERE sia_synced = FALSE)
+                AS pending_cnt;
+                """
+            )
+            return int(cur.fetchone()["pending_cnt"] or 0)
 
     def export_runs_csv(self):
         rows = self.list_runs(include_deleted=False)
