@@ -65,19 +65,36 @@ class EcoStepDatabase:
     def __init__(self, pg_cfg=None):
         self.cfg = pg_cfg or config.load_pg_config()
         self._lock = threading.RLock()
+        self._conn = None
         self.connected = False
         self.last_error = None
 
-    def update_config(self, host, port, user, password, dbname="ecostep_qcu_db"):
-        self.cfg = {
-            "host": host,
-            "port": int(port),
-            "user": user,
-            "password": password,
-            "dbname": dbname,
-        }
+    def _close_cached_conn(self):
+        conn = self._conn
+        self._conn = None
+        if conn is not None:
+            try:
+                if conn.closed == 0:
+                    conn.close()
+            except Exception:
+                pass
 
-    def _connect(self, dbname=None):
+    def close(self):
+        with self._lock:
+            self._close_cached_conn()
+
+    def update_config(self, host, port, user, password, dbname="ecostep_qcu_db"):
+        with self._lock:
+            self._close_cached_conn()
+            self.cfg = {
+                "host": host,
+                "port": int(port),
+                "user": user,
+                "password": password,
+                "dbname": dbname,
+            }
+
+    def _open_new_connection(self, dbname=None):
         return psycopg2.connect(
             host=self.cfg["host"],
             port=self.cfg["port"],
@@ -87,6 +104,22 @@ class EcoStepDatabase:
             connect_timeout=4,
             cursor_factory=RealDictCursor,
         )
+
+    def _connect(self, dbname=None):
+        # One-off connection for admin database tasks (e.g. dbname="postgres")
+        if dbname is not None:
+            return self._open_new_connection(dbname=dbname)
+        # Reuse persistent connection for all app queries (eliminates per-click TCP handshakes)
+        conn = self._conn
+        if conn is not None and conn.closed == 0:
+            try:
+                if conn.status != psycopg2.extensions.STATUS_READY:
+                    conn.rollback()
+                return conn
+            except Exception:
+                self._close_cached_conn()
+        self._conn = self._open_new_connection()
+        return self._conn
 
     @staticmethod
     def _find_pg_ctl():

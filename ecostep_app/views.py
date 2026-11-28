@@ -132,6 +132,7 @@ class VoltageMeterCanvas(tk.Canvas):
         self.pulse_alpha = 0
         self.on_tile_click = on_tile_click
         self._arc_photo = None
+        self._arc_cache_key = None
         if on_tile_click:
             self.bind("<Button-1>", self._handle_click)
         self.redraw()
@@ -168,8 +169,11 @@ class VoltageMeterCanvas(tk.Canvas):
         cx, cy, r = 154, 113, 90
         frac = min(1.0, self.volts / 6.0)
         arc_col = PALETTE["amber"] if self.volts >= 4.2 else PALETTE["green_bright"]
-        arc_img = render_supersampled_arc_gauge(308, 130, cx, cy, r, frac, arc_col, bg_track, self.mode)
-        self._arc_photo = ImageTk.PhotoImage(arc_img)
+        cache_key = (round(self.volts, 2), arc_col, self.mode)
+        if cache_key != self._arc_cache_key or self._arc_photo is None:
+            arc_img = render_supersampled_arc_gauge(308, 130, cx, cy, r, frac, arc_col, bg_track, self.mode)
+            self._arc_photo = ImageTk.PhotoImage(arc_img)
+            self._arc_cache_key = cache_key
         self.create_image(0, 0, anchor="nw", image=self._arc_photo)
 
         # Tick marks (0..6 V)

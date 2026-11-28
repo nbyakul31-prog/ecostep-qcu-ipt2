@@ -286,6 +286,7 @@ class EcoStepApp(ctk.CTk):
         self._banner_size = (0, 0, None)
         self._sb_wave_photo = None
         self._icons = {}
+        self.active_tab = "live"
 
         self._build_icons()
         self._build_layout()
@@ -532,6 +533,13 @@ class EcoStepApp(ctk.CTk):
         mode = ctk.get_appearance_mode()
         w = w or self.topbar_canvas.winfo_width() or 1020
         h = h or self.topbar_canvas.winfo_height() or 74
+        size_key = (w, h, mode)
+        if size_key == self._banner_size and self.topbar_canvas.find_withtag("topbar_title"):
+            self.topbar_canvas.itemconfigure("topbar_title", text=self.page_title_str)
+            self.topbar_canvas.itemconfigure("topbar_sub", text=self.page_sub_str)
+            return
+        self._banner_size = size_key
+
         card_col = pick(PALETTE["card"], mode)
         self.topbar_canvas.configure(bg=pick(PALETTE["bg"], mode))
         self.tright.configure(fg_color=card_col, bg_color=card_col)
@@ -550,8 +558,8 @@ class EcoStepApp(ctk.CTk):
 
         title_col = "#FFFFFF" if mode == "Dark" else "#122618"
         sub_col = "#A7D7B8" if mode == "Dark" else "#4C6A52"
-        self.topbar_canvas.create_text(58, h // 2 - 11, anchor="w", text=self.page_title_str, font=("Segoe UI", 15, "bold"), fill=title_col, tags="bg_art")
-        self.topbar_canvas.create_text(58, h // 2 + 12, anchor="w", text=self.page_sub_str, font=("Segoe UI", 9), fill=sub_col, tags="bg_art")
+        self.topbar_canvas.create_text(58, h // 2 - 11, anchor="w", text=self.page_title_str, font=("Segoe UI", 15, "bold"), fill=title_col, tags=("bg_art", "topbar_title"))
+        self.topbar_canvas.create_text(58, h // 2 + 12, anchor="w", text=self.page_sub_str, font=("Segoe UI", 9), fill=sub_col, tags=("bg_art", "topbar_sub"))
 
         self.topbar_canvas.coords(self.topbar_controls_win, w - 12, h // 2)
         self.topbar_canvas.tag_raise(self.topbar_controls_win)
@@ -664,6 +672,7 @@ class EcoStepApp(ctk.CTk):
         return frame
 
     def show_tab(self, name):
+        self.active_tab = name
         titles = {
             "live": ("Live Telemetry Monitor", "Recycled Kinetic Mat • Real-Time USB-C Stream & 4x4 PZT Pulse Gauge"),
             "time": ("Time Horizons & Device Equivalences", "1H / 10H Shift / 24H / 48H / 7D Analytics • Battery SoC % & Connected Loads"),
@@ -692,11 +701,10 @@ class EcoStepApp(ctk.CTk):
             card.set_mode(mode)
         self.meter.set_mode(mode)
         self.diag_drawer.set_mode(mode)
-        self._redraw_waveform()
-        self.tabs["time"].refresh()
-        self.tabs["runs"].refresh()
-        self.tabs["signs"].refresh()
-        self.tabs["components"].refresh()
+        if self.active_tab == "live":
+            self._redraw_waveform()
+        else:
+            self.tabs[self.active_tab].refresh()
         configure_tree_zebra(self.live_tree, mode)
         if mode == "Dark":
             self.theme_switch.select()
@@ -966,51 +974,58 @@ class EcoStepApp(ctk.CTk):
         self.wave_fig.tight_layout()
         self.wave_canvas.draw_idle()
 
-    def refresh_all(self):
+    def refresh_all(self, force_all=False):
         if not self.db.connected:
             return
-        mode = ctk.get_appearance_mode()
-        configure_tree_zebra(self.live_tree, mode)
-        summary = self.db.get_dashboard_summary()
-        cadence = self.db.get_cadence_spm(minutes=5)
-        time_tab = self.tabs["time"]
-        eq = analytics.compute_battery_and_equivalences(
-            summary["total_joules"],
-            battery_cap_wh=time_tab.battery_cap_wh,
-            usb_loads=time_tab.usb_loads,
-            led_12v_on=time_tab.led_12v_on,
-            sign_mode=time_tab.sign_mode,
-        )
-        self.kpi_steps.set_values(sub_text=f"Cadence: {cadence:.1f} steps/min")
-        self.kpi_joules.set_values(
-            val_text=f"{summary['total_joules']:.2f} J",
-            sub_text=f"SoC: {eq['soc_pct']:.2f}% ({eq['wh_stored']:.4f} Wh)",
-        )
-        self.kpi_db.set_values(
-            val_text=f"{summary['telemetry_count']} logs",
-            sub_text=f"{summary['active_runs']} runs • {summary['sign_tests_count']} sign tests",
-        )
-
-        logs = self.db.list_telemetry_logs(limit=40)
-        self.live_tree.delete(*self.live_tree.get_children())
-        for idx, r in enumerate(logs):
-            insert_zebra_row(
-                self.live_tree, idx,
-                (
-                    r["log_id"], r["run_id"], r["step_number"], r["adc_raw"],
-                    f"{float(r['adc_voltage']):.2f}", r["baud_rate"], str(r["recorded_at"])[:19],
-                ),
+        active = getattr(self, "active_tab", "live")
+        if force_all or active == "live":
+            mode = ctk.get_appearance_mode()
+            configure_tree_zebra(self.live_tree, mode)
+            summary = self.db.get_dashboard_summary()
+            cadence = self.db.get_cadence_spm(minutes=5)
+            time_tab = self.tabs["time"]
+            eq = analytics.compute_battery_and_equivalences(
+                summary["total_joules"],
+                battery_cap_wh=time_tab.battery_cap_wh,
+                usb_loads=time_tab.usb_loads,
+                led_12v_on=time_tab.led_12v_on,
+                sign_mode=time_tab.sign_mode,
             )
-        if self.live_chart_mode != "LIVE":
-            self._redraw_waveform()
-        time_tab.refresh()
-        self.tabs["runs"].refresh()
-        self.tabs["signs"].refresh()
-        self.tabs["components"].refresh()
+            self.kpi_steps.set_values(sub_text=f"Cadence: {cadence:.1f} steps/min")
+            self.kpi_joules.set_values(
+                val_text=f"{summary['total_joules']:.2f} J",
+                sub_text=f"SoC: {eq['soc_pct']:.2f}% ({eq['wh_stored']:.4f} Wh)",
+            )
+            self.kpi_db.set_values(
+                val_text=f"{summary['telemetry_count']} logs",
+                sub_text=f"{summary['active_runs']} runs • {summary['sign_tests_count']} sign tests",
+            )
+
+            logs = self.db.list_telemetry_logs(limit=40)
+            self.live_tree.delete(*self.live_tree.get_children())
+            for idx, r in enumerate(logs):
+                insert_zebra_row(
+                    self.live_tree, idx,
+                    (
+                        r["log_id"], r["run_id"], r["step_number"], r["adc_raw"],
+                        f"{float(r['adc_voltage']):.2f}", r["baud_rate"], str(r["recorded_at"])[:19],
+                    ),
+                )
+            if self.live_chart_mode != "LIVE":
+                self._redraw_waveform()
+
+        if force_all:
+            self.tabs["time"].refresh()
+            self.tabs["runs"].refresh()
+            self.tabs["signs"].refresh()
+            self.tabs["components"].refresh()
+        elif active in ("time", "runs", "signs", "components"):
+            self.tabs[active].refresh()
 
     def _on_close(self):
         self.sia_sync.stop()
         self.worker.disconnect()
+        self.db.close()
         self.destroy()
 
 
